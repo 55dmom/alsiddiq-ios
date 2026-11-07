@@ -88,6 +88,12 @@ final class DemoRepository: AppRepository {
         return v
     }
 
+    // MARK: Setup (not used in demo mode)
+    func needsSetup() async -> Bool? { false }
+    func bootstrap(centerName: String, fullName: String, phone: String, password: String) async throws -> Member {
+        throw AppError.validation("الإعداد الأول متاح فقط مع قاعدة البيانات المركزية")
+    }
+
     // MARK: Auth
     func signIn(login: String, password: String) async throws -> Member {
         let key = Phone.normalise(login)

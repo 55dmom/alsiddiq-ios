@@ -17,6 +17,10 @@ protocol AppRepository: AnyObject {
     var syncState: SyncState { get }
     var onChange: (() -> Void)? { get set }
 
+    // First-time setup of a brand-new central database (cloud only)
+    func needsSetup() async -> Bool?
+    func bootstrap(centerName: String, fullName: String, phone: String, password: String) async throws -> Member
+
     // Auth
     func signIn(login: String, password: String) async throws -> Member
     func signOut() async

@@ -95,6 +95,7 @@ jobs:
             2>&1 | tee sim.log | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" || true
           grep -q "BUILD SUCCEEDED" sim.log
       - name: Shoot
+        timeout-minutes: 20
         run: bash ci/shots.sh "${{ steps.sim.outputs.udid }}"
       - uses: actions/upload-artifact@v4
         if: always()

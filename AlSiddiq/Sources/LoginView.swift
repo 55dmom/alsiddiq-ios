@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var pass = ""
     @State private var busy = false
     @State private var error: String?
+    @State private var needsSetup: Bool?
 
     let demos: [(String, String)] = [("الإدارة", DemoSeed.adminPhone), ("معلم", DemoSeed.teacherPhone),
                                              ("طالب", DemoSeed.studentPhone), ("ولي أمر", DemoSeed.parentPhone)]
@@ -21,6 +22,19 @@ struct LoginView: View {
     }
 
     var body: some View {
+        Group {
+            if needsSetup == true {
+                SetupView { needsSetup = false }
+            } else {
+                loginForm
+            }
+        }
+        .task {
+            if !model.isDemo { needsSetup = await model.repo.needsSetup() }
+        }
+    }
+
+    private var loginForm: some View {
         ScrollView {
             VStack(spacing: 0) {
                 Spacer().frame(height: 48)

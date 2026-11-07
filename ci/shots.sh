@@ -2,17 +2,21 @@
 # Installs the simulator build and captures the main screens of every role (demo data).
 U="$1"
 BID=com.alsiddiq.app
-xcrun simctl boot "$U" || true
-xcrun simctl bootstatus "$U" -b
-xcrun simctl status_bar "$U" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
+t() { local s=$1; shift; perl -e 'alarm shift; exec @ARGV' "$s" "$@"; } # macOS has no timeout(1)
+echo "boot $(date +%T)"
+t 120 xcrun simctl boot "$U" || true
+t 600 xcrun simctl bootstatus "$U" -b || echo "bootstatus did not finish"
+echo "booted $(date +%T)"
+t 30 xcrun simctl status_bar "$U" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
 APP=$(find dd/Build/Products -name "AlSiddiq.app" -maxdepth 3 | head -1)
-xcrun simctl install "$U" "$APP"
+t 180 xcrun simctl install "$U" "$APP"
+echo "installed $(date +%T)"
 mkdir -p shots
 shot() { # name role route wait
-  xcrun simctl terminate "$U" $BID 2>/dev/null || true
-  xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -autoLogin "$2" -startRoute "$3" > /dev/null
+  t 20 xcrun simctl terminate "$U" $BID 2>/dev/null || true
+  t 60 xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -forceDemo "${FORCE_DEMO:-YES}" -autoLogin "$2" -startRoute "$3" > /dev/null
   sleep "${4:-6}"
-  xcrun simctl io "$U" screenshot "shots/$1.png" > /dev/null 2>&1
+  t 30 xcrun simctl io "$U" screenshot "shots/$1.png" > /dev/null 2>&1
   echo "shot $1"
 }
 shot 00_login login home 10
@@ -31,5 +35,9 @@ shot 12_parent_home parent home
 shot 13_student_profile parent student/s1
 shot 14_parent_notifications parent notifications
 shot 15_admin_add_student admin student_edit/new
+if [ -n "$SUPABASE_URL" ]; then
+  # The real build: the login screen against the central database (no demo data).
+  FORCE_DEMO=NO shot 16_cloud_login login home 12
+fi
 xcrun simctl spawn "$U" log show --last 5m --predicate 'process == "AlSiddiq" AND messageType == fault' > shots/faults.txt 2>/dev/null || true
 ls -la shots
