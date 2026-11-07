@@ -10,13 +10,11 @@ struct AdminHome: View {
         let stats = Stats.forCenter(snap, snap.students)
         let today = Days.today
         let weekStart = Days.add(today, -6)
-        let top = snap.students.map { s -> (Student, Int) in
-            (s, snap.recitations.filter { $0.studentId == s.id && $0.kind == .hifz && Days.dayOf($0.recordedAt) >= weekStart }.reduce(0) { $0 + Stats.ayatOf($1) })
-        }.sorted { $0.1 > $1.1 }.prefix(5)
+        let top = AdminHome.topStudents(snap, since: weekStart)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HomeHeader(greeting: "السلام عليكم ورحمة الله", title: snap.center.name,
-                           subtitle: Fmt.dayTitle(today) + " • " + Fmt.hijri(today), unread: snap.unreadCount) { router.go(.notifications) }
+                           subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))", unread: snap.unreadCount) { router.go(.notifications) }
                 VStack(alignment: .leading, spacing: 0) {
                     if model.isDemo { DemoBanner().padding(.top, 12) }
                     HStack(spacing: 10) {
@@ -75,6 +73,18 @@ struct AdminHome: View {
     }
 }
 
+extension AdminHome {
+    static func topStudents(_ snap: CenterSnapshot, since: Date) -> [(Student, Int)] {
+        var out: [(Student, Int)] = []
+        for s in snap.students {
+            var n = 0
+            for r in snap.recitations where r.studentId == s.id && r.kind == .hifz && Days.dayOf(r.recordedAt) >= since { n += Stats.ayatOf(r) }
+            out.append((s, n))
+        }
+        return Array(out.sorted { $0.1 > $1.1 }.prefix(5))
+    }
+}
+
 struct TeacherHome: View {
     let user: Member
     @EnvironmentObject var model: AppModel
@@ -92,7 +102,7 @@ struct TeacherHome: View {
         let recent = snap.recitations.filter { $0.teacherId == user.id }.sorted { $0.recordedAt > $1.recordedAt }.prefix(6)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HomeHeader(greeting: "السلام عليكم", title: user.fullName, subtitle: Fmt.dayTitle(today) + " • " + Fmt.hijri(today),
+                HomeHeader(greeting: "السلام عليكم", title: user.fullName, subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))",
                            unread: snap.unreadCount) { router.go(.notifications) }
                 VStack(alignment: .leading, spacing: 0) {
                     if model.isDemo { DemoBanner().padding(.top, 12) }

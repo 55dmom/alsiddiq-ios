@@ -12,9 +12,11 @@ struct StudentsScreen: View {
         let circles = Permissions.visibleCircles(user, snap)
         let options = ["الكل"] + circles.map { $0.name }
         let needle = q.trimmingCharacters(in: .whitespaces)
-        let list = Permissions.visibleStudents(user, snap).filter { s in
-            (circleIdx == 0 || s.circleId == (circles.indices.contains(circleIdx - 1) ? circles[circleIdx - 1].id : nil)) &&
-                (needle.isEmpty || s.fullName.contains(needle) || s.phone.contains(needle))
+        let pickedCircle: String? = circleIdx > 0 && circles.indices.contains(circleIdx - 1) ? circles[circleIdx - 1].id : nil
+        let list = Permissions.visibleStudents(user, snap).filter { (s: Student) -> Bool in
+            let inCircle = circleIdx == 0 || s.circleId == pickedCircle
+            let matches = needle.isEmpty || s.fullName.contains(needle) || s.phone.contains(needle)
+            return inCircle && matches
         }
         ScreenList(title: "الطلاب", fab: Permissions.canManageStudents(user) ? Fab(label: "طالب جديد") { router.go(.studentEdit("new", nil)) } : nil) {
             SearchField(placeholder: "بحث باسم الطالب", text: $q)
@@ -86,7 +88,7 @@ struct StudentDashboard: View {
             SectionHeader(title: "بيانات الطالب")
             AppCard {
                 KeyValueRow(key: "الحلقة", value: snap.circle(s.circleId)?.name ?? "—")
-                KeyValueRow(key: "المعلم", value: snap.member(snap.circle(s.circleId)?.teacherId)?.fullName ?? "—")
+                KeyValueRow(key: "المعلم", value: teacherName(snap))
                 KeyValueRow(key: "تاريخ الالتحاق", value: Days.parse(s.joinedOn).map { Fmt.date($0) } ?? s.joinedOn)
                 if let b = s.birthYear { KeyValueRow(key: "سنة الميلاد", value: "\(b)") }
                 KeyValueRow(key: "الحالة", value: s.status.label)
@@ -96,6 +98,13 @@ struct StudentDashboard: View {
                 }
             }
         }
+    }
+}
+
+extension StudentDashboard {
+    func teacherName(_ snap: CenterSnapshot) -> String {
+        guard let c = snap.circle(s.circleId), let t = snap.member(c.teacherId) else { return "—" }
+        return t.fullName
     }
 }
 

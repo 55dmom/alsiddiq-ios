@@ -140,8 +140,17 @@ struct Avatar: View {
     var size: CGFloat = 44
     var color: Color = Brand.navy
     var initials: String {
-        name.split(separator: " ").map(String.init).filter { !$0.isEmpty && $0 != "الشيخ" && $0 != "الأستاذ" }
-            .prefix(2).map { String($0.prefix(1)) }.joined()
+        let skip: Set<String> = ["الشيخ", "الأستاذ"]
+        var out = ""
+        var n = 0
+        for part in name.split(separator: " ") {
+            let w = String(part)
+            if w.isEmpty || skip.contains(w) { continue }
+            if let c = w.first { out.append(c) }
+            n += 1
+            if n == 2 { break }
+        }
+        return out
     }
     var body: some View {
         ZStack {
@@ -302,12 +311,14 @@ struct DonutChart: View {
                 if total <= 0 {
                     SwiftUI.Circle().stroke(Brand.line, lineWidth: 22).padding(11)
                 } else {
+                    let fr = fractions(total)
                     ForEach(Array(slices.enumerated()), id: \.offset) { i, s in
-                        let start = slices.prefix(i).reduce(0) { $0 + $1.value } / total
-                        let end = start + s.value / total
+                        let a: CGFloat = fr[i].0 * sweep
+                        let b: CGFloat = max(a, fr[i].1 * sweep - 0.004)
+                        let w: CGFloat = selected == i ? 27 : 22
                         SwiftUI.Circle()
-                            .trim(from: CGFloat(start) * sweep, to: max(CGFloat(start) * sweep, CGFloat(end) * sweep - 0.004))
-                            .stroke(s.color, lineWidth: selected == i ? 27 : 22)
+                            .trim(from: a, to: b)
+                            .stroke(s.color, lineWidth: w)
                             .rotationEffect(.degrees(-90))
                             .padding(13.5)
                     }
@@ -334,6 +345,19 @@ struct DonutChart: View {
             }
         }
         .onAppear { withAnimation(.easeOut(duration: 0.9)) { sweep = 1 } }
+    }
+}
+
+extension DonutChart {
+    func fractions(_ total: Double) -> [(CGFloat, CGFloat)] {
+        var out: [(CGFloat, CGFloat)] = []
+        var acc = 0.0
+        for s in slices {
+            let start = acc / total
+            acc += s.value
+            out.append((CGFloat(start), CGFloat(acc / total)))
+        }
+        return out
     }
 }
 

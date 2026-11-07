@@ -61,6 +61,11 @@ struct RecordScreen: View {
         return nil
     }
 
+    private func lastText(_ r: Recitation?) -> String {
+        guard let r = r else { return "لا يوجد" }
+        return "\(Stats.describeRange(r)) • \(Fmt.relative(r.recordedAt))"
+    }
+
     private func surahLabel(_ n: Int) -> String { "\(n). \(Quran.name(n)) (\(Quran.ayahCount(n)))" }
 
     var body: some View {
@@ -101,7 +106,7 @@ struct RecordScreen: View {
                     Avatar(name: s.fullName)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(s.fullName).font(T.titleSmall).foregroundColor(Brand.ink)
-                        Text("آخر حفظ: " + (last.map { Stats.describeRange($0) + " • " + Fmt.relative($0.recordedAt) } ?? "لا يوجد"))
+                        Text("آخر حفظ: \(lastText(last))")
                             .font(T.bodySmall).foregroundColor(Brand.muted)
                     }
                     Spacer()

@@ -82,7 +82,7 @@ struct StudentRow<Trailing: View>: View {
                 Avatar(name: s.fullName)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(s.fullName).font(T.titleSmall).foregroundColor(Brand.ink)
-                    Text((snap.circle(s.circleId)?.name ?? "بدون حلقة") + " • " + Fmt.one(stats.juzEquivalent) + " جزء")
+                    Text("\(snap.circle(s.circleId)?.name ?? "بدون حلقة") • \(Fmt.one(stats.juzEquivalent)) جزء")
                         .font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(1)
                     LinearMeter(progress: stats.goalProgress, color: Brand.navy).padding(.top, 4)
                 }

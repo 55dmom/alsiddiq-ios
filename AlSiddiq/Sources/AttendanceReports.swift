@@ -27,7 +27,9 @@ private struct AttendanceTaking: View {
         let dayIso = Days.iso(day)
         var saved: [String: AttendanceStatus] = [:]
         for a in snap.attendance where a.day == dayIso && a.circleId == circle?.id { saved[a.studentId] = a.status }
-        let key = (circle?.id ?? "") + dayIso + "\(saved.count)" + saved.values.map { $0.rawValue }.sorted().joined()
+        let cid: String = circle?.id ?? ""
+        let savedSig: String = saved.map { "\($0.key)=\($0.value.rawValue)" }.sorted().joined(separator: ",")
+        let key = "\(cid)|\(dayIso)|\(savedSig)"
         let dirty = students.contains { marks[$0.id] != saved[$0.id] }
         let p = students.filter { marks[$0.id]?.isPresent == true }.count
         let a = students.filter { marks[$0.id] == .absent }.count
@@ -151,15 +153,21 @@ struct ReportsScreen: View {
     @State private var rangeIdx = 1
     let ranges: [(Int, String)] = [(7, "أسبوع"), (30, "شهر"), (90, "3 أشهر")]
 
+    private func scopedStudents(_ visible: [Student], _ circles: [StudyCircle], _ isParent: Bool) -> [Student] {
+        if isParent { return visible.indices.contains(scopeIdx) ? [visible[scopeIdx]] : [] }
+        if scopeIdx == 0 { return visible }
+        guard circles.indices.contains(scopeIdx - 1) else { return [] }
+        let cid = circles[scopeIdx - 1].id
+        return visible.filter { $0.circleId == cid }
+    }
+
     var body: some View {
         let snap = model.snap
         let visible = Permissions.visibleStudents(user, snap)
         let circles = Permissions.visibleCircles(user, snap)
         let isParent = user.role == .parent
         let scopeOptions = isParent ? visible.map { $0.fullName } : ["المركز كاملاً"] + circles.map { $0.name }
-        let students: [Student] = isParent
-            ? (visible.indices.contains(scopeIdx) ? [visible[scopeIdx]] : [])
-            : (scopeIdx == 0 ? visible : visible.filter { $0.circleId == (circles.indices.contains(scopeIdx - 1) ? circles[scopeIdx - 1].id : nil) })
+        let students = scopedStudents(visible, circles, isParent)
         let since = Days.add(Days.today, -(ranges[rangeIdx].0 - 1))
         let ids = Set(students.map { $0.id })
         let recs = snap.recitations.filter { ids.contains($0.studentId) && Days.dayOf($0.recordedAt) >= since }
@@ -176,7 +184,10 @@ struct ReportsScreen: View {
             return (d, recs.filter { Days.dayOf($0.recordedAt) == d }.reduce(0) { $0 + Stats.ayatOf($1) })
         }
         let avg = recs.isEmpty ? 0 : Double(recs.reduce(0) { $0 + $1.grade.score }) / Double(recs.count)
-        let ranked = students.map { s in (s, hifzRecs.filter { $0.studentId == s.id }.reduce(0) { $0 + Stats.ayatOf($1) }) }.sorted { $0.1 > $1.1 }
+        let ranked: [(Student, Int)] = students.map { (s: Student) -> (Student, Int) in
+            let n = hifzRecs.filter { $0.studentId == s.id }.reduce(0) { $0 + Stats.ayatOf($1) }
+            return (s, n)
+        }.sorted { $0.1 > $1.1 }
         let maxRank = max(ranked.map { $0.1 }.max() ?? 1, 1)
 
         ScreenList(title: "التقارير") {

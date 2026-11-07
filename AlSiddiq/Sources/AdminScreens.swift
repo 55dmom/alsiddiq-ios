@@ -47,7 +47,7 @@ struct MembersScreen: View {
                         Avatar(name: m.fullName, color: m.role == .teacher ? Brand.maroon : Brand.navy)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(m.fullName).font(T.titleSmall).foregroundColor(Brand.ink)
-                            Text(m.phone + " • " + extra(m, snap)).font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(1)
+                            Text("\(m.phone) • \(extra(m, snap))").font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(1)
                         }
                         Spacer()
                         if !m.active { Pill(text: "موقوف", color: Brand.red) }
@@ -210,7 +210,10 @@ struct CenterSettingsScreen: View {
 struct AboutScreen: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
-        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") + " (" + (Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1") + ")"
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short: String = info["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build: String = info["CFBundleVersion"] as? String ?? "1"
+        let version = "\(short) (\(build))"
         ScreenList(title: "عن التطبيق") {
             AppCard {
                 VStack(spacing: 4) {

@@ -28,7 +28,7 @@ struct RewardsScreen: View {
         let canGive = user.role == .admin || user.role == .teacher
         let ids = Set(visible.map { $0.id })
         let history = Array(snap.rewards.filter { ids.contains($0.studentId) }.sorted { $0.createdAt > $1.createdAt }.prefix(30))
-        let board = Array(visible.map { s in (s, snap.rewards.filter { $0.studentId == s.id }.reduce(0) { $0 + $1.points }) }.sorted { $0.1 > $1.1 }.prefix(10))
+        let board = RewardsScreen.leaderboard(visible, snap)
 
         ScreenList(title: "المكافآت", fab: canGive ? Fab(label: "منح مكافأة") { pickStudent(visible, snap) } : nil) {
             if user.role == .student || user.role == .parent {
@@ -109,6 +109,18 @@ struct RewardsScreen: View {
     private func give(_ s: Student) {
         guard user.role == .admin || user.role == .teacher else { return }
         dialogs.show(RewardDialog(student: s, user: user))
+    }
+}
+
+extension RewardsScreen {
+    static func leaderboard(_ visible: [Student], _ snap: CenterSnapshot) -> [(Student, Int)] {
+        var out: [(Student, Int)] = []
+        for s in visible {
+            var n = 0
+            for r in snap.rewards where r.studentId == s.id { n += r.points }
+            out.append((s, n))
+        }
+        return Array(out.sorted { $0.1 > $1.1 }.prefix(10))
     }
 }
 
