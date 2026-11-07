@@ -1,0 +1,124 @@
+name: build-ipa
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+  SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Archive (unsigned)
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          xcodebuild -project AlSiddiq.xcodeproj -scheme AlSiddiq -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath build/AlSiddiq.xcarchive archive \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            2>&1 | tee build.log | grep -E "error:|ARCHIVE SUCCEEDED|ARCHIVE FAILED|BUILD FAILED" || true
+          grep -E "error:" build.log | sort -u | head -60 > errors.txt || true
+          test -d build/AlSiddiq.xcarchive/Products/Applications/AlSiddiq.app
+          grep -q "ARCHIVE SUCCEEDED" build.log
+      - name: Package ipa
+        run: |
+          mkdir -p out/Payload
+          cp -R build/AlSiddiq.xcarchive/Products/Applications/AlSiddiq.app out/Payload/
+          cd out && zip -qry AlSiddiq_unsigned.ipa Payload && ls -la AlSiddiq_unsigned.ipa
+          unzip -l AlSiddiq_unsigned.ipa | head -20
+      - name: Upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlSiddiq_unsigned
+          path: out/AlSiddiq_unsigned.ipa
+          compression-level: 0
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            errors.txt
+      - name: Publish failure log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          touch errors.txt build.log
+          tail -c 200000 build.log > build_tail.log
+          gh release create "fail-${{ github.run_number }}" errors.txt build_tail.log --repo "${{ github.repository }}" --prerelease \
+            --title "failed build ${{ github.run_number }}" --notes "compile errors of run ${{ github.run_number }}" || true
+
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen && xcodegen generate
+      - name: Pick simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro')] or [x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')];print(c[-1]['udid'])")
+          echo "udid=$UDID" >> $GITHUB_OUTPUT
+      - name: Build for simulator
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          xcodebuild -project AlSiddiq.xcodeproj -scheme AlSiddiq -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" -derivedDataPath dd build \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            2>&1 | tee sim.log | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" || true
+          grep -q "BUILD SUCCEEDED" sim.log
+      - name: Shoot
+        run: bash ci/shots.sh "${{ steps.sim.outputs.udid }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots
+
+  release:
+    needs: [ipa, screenshots]
+    if: always() && needs.ipa.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -R art | head -60
+          TAG=build-${{ github.run_number }}
+          FILES="art/AlSiddiq_unsigned/AlSiddiq_unsigned.ipa art/build-log/build.log"
+          if [ -d art/screenshots ]; then FILES="$FILES $(ls art/screenshots/*.png 2>/dev/null | tr '\n' ' ')"; fi
+          MODE="demo data (no central database configured)"
+          if [ -n "$SUPABASE_URL" ]; then MODE="central database: $SUPABASE_URL"; fi
+          gh release create "$TAG" $FILES --repo "${{ github.repository }}" --title "مركز الصديق iOS — build ${{ github.run_number }}" \
+            --notes "Unsigned .ipa (sign it yourself). Data: $MODE. Commit ${{ github.sha }}."
