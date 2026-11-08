@@ -208,6 +208,11 @@ final class SupabaseAPI {
         try await ok("DELETE", "/rest/v1/\(table)?\(filter)", token: token, headers: ["Prefer": "return=minimal"])
     }
 
+    /// v3.8: a database function (RPC), e.g. set_circle_photo.
+    func rpc(token: String, name: String, body: JSON) async throws {
+        _ = try await ok("POST", "/rest/v1/rpc/\(name)", token: token, body: body)
+    }
+
     func function(token: String?, name: String, body: JSON) async throws -> JSON {
         let data = try await ok("POST", "/functions/v1/\(name)", token: token, body: body)
         return ((try? JSONSerialization.jsonObject(with: data)) as? JSON) ?? [:]
@@ -262,7 +267,7 @@ enum Rows {
         return StudyCircle(id: id, name: s(o, "name") ?? "", teacherId: s(o, "teacher_id"), teacherName: s(o, "teacher_name"),
                            feeYer: i(o, "fee_yer"), feePeriod: s(o, "fee_period"), level: s(o, "level") ?? "",
                            schedule: s(o, "schedule") ?? "", capacity: i(o, "capacity") ?? 15, active: b(o, "active") ?? true,
-                           createdAt: ts(o["created_at"]))
+                           createdAt: ts(o["created_at"]), photoPath: s(o, "photo_path"))
     }
 
     /// v3.5: set once the server's circles carry fee_yer; until then the fee columns are only sent when a fee is set.

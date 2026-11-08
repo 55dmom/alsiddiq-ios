@@ -290,6 +290,8 @@ final class CloudRepository: AppRepository {
         async let events = adminEventRows(t, isAdmin)
         async let tmarks = adminRows(t, isAdmin, "teacher_attendance", "select=*&order=day.desc")
         async let budgetRows = adminRows(t, isAdmin, "budget_entries", "select=*&order=day.desc")
+        // v3.8: RLS gives the admin every student's months and a teacher his own circle's; the general view never asks
+        async let subRows = adminRows(t, me.role != .viewer, "student_subscriptions", "select=*&order=month.desc")
 
         let members = (try await profiles).compactMap { Rows.member($0) }
         if !members.contains(where: { $0.id == me.id }) {
@@ -318,6 +320,7 @@ final class CloudRepository: AppRepository {
         // v3.8: admin only (a server without the tables yet gives empty lists)
         fresh.teacherMarks = isAdmin ? ((try? await tmarks) ?? []).compactMap { Rows.teacherMark($0) } : nil
         fresh.budget = isAdmin ? ((try? await budgetRows) ?? []).compactMap { Rows.budgetEntry($0) } : nil
+        fresh.subscriptions = me.role != .viewer ? ((try? await subRows) ?? []).compactMap { Rows.subscription($0) } : nil
 
         // Writes still waiting stay visible on screen until the server has them.
         let merged = st.outbox.isEmpty ? fresh : overlayPending(fresh)
@@ -381,6 +384,7 @@ final class CloudRepository: AppRepository {
         // v3.8: while a teacher-attendance or budget write waits, the phone's own list stays on screen
         if st.outbox.contains(where: { $0.table == "teacher_attendance" }), out.teacherMarks != nil { out.teacherMarks = old.teacherMarks ?? out.teacherMarks }
         if st.outbox.contains(where: { $0.table == "budget_entries" }), out.budget != nil { out.budget = old.budget ?? out.budget }
+        if st.outbox.contains(where: { $0.table == "student_subscriptions" }), out.subscriptions != nil { out.subscriptions = old.subscriptions ?? out.subscriptions }
         if st.outbox.contains(where: { $0.table == "honor_cards" }) {
             let have = Set((out.honorCards ?? []).map { $0.id })
             out.honorCards = (old.honorCards ?? []).filter { !have.contains($0.id) } + (out.honorCards ?? [])
@@ -803,6 +807,62 @@ final class CloudRepository: AppRepository {
         _ = try await write(PendingOp(type: "delete", table: "budget_entries", filter: "id=eq.\(id)"), ()) { d in
             d.budget?.removeAll { $0.id == id }
         }
+    }
+
+    func saveSubscriptions(month: String, marks: [String: SubscriptionMark]) async throws -> Int {
+        let u = try me()
+        let d = st.cache
+        if marks.isEmpty { return 0 }
+        for sid in marks.keys {
+            guard let s = d.student(sid) else { throw AppError.validation("الطالب غير موجود") }
+            try require(Permissions.canEditStudent(u, s, d))
+        }
+        let c = try center()
+        let now = Rows.iso(Date())
+        let rows: [JSON] = marks.map { sid, m in
+            ["center_id": c, "student_id": sid, "month": month, "paid": m.paid, "amount": opt(m.paid ? m.amount : nil),
+             "marked_by": u.id, "updated_at": now]
+        }
+        let local = marks.map { StudentSubscription(id: newId(), studentId: $0.key, month: month, paid: $0.value.paid, amount: $0.value.paid ? $0.value.amount : nil) }
+        return try await write(PendingOp(type: "upsert", table: "student_subscriptions", body: json(rows), onConflict: "student_id,month"), marks.count) { snap in
+            var list = snap.subscriptions ?? []
+            list.removeAll { $0.month == month && marks.keys.contains($0.studentId) }
+            snap.subscriptions = local + list
+        }
+    }
+
+    func setCirclePhoto(circleId: String, jpeg: Data?) async throws {
+        let u = try me()
+        guard let circle = st.cache.circle(circleId) else { throw AppError.validation("الحلقة غير موجودة") }
+        try require(Permissions.canTakeAttendance(u, circle.id, st.cache))
+        let t: String
+        do { t = try await token() } catch is OfflineError { throw AppError.network("الصورة تحتاج اتصالاً بالإنترنت") }
+        let old = circle.photoPath
+        var newPath: String? = nil
+        do {
+            if let data = jpeg {
+                let path = "\(try center())/circles/\(circleId)/\(newId()).jpg"
+                try await api.storageUpload(token: t, bucket: Self.bucket, path: path, data: data)
+                newPath = path
+                if let img = UIImage(data: data) { photoCache[path] = img; savePhotoFile(path, data) }
+            }
+            // teachers have no UPDATE on circles: one code path through the RPC for everyone
+            try await api.rpc(token: t, name: "set_circle_photo", body: ["cid": circleId, "path": opt(newPath)])
+        } catch is OfflineError { throw AppError.network("الصورة تحتاج اتصالاً بالإنترنت") }
+        if let i = st.cache.circles.firstIndex(where: { $0.id == circleId }) { st.cache.circles[i].photoPath = newPath }
+        save(); publish()
+        if let old = old, old != newPath { Task { try? await api.storageDelete(token: t, bucket: Self.bucket, path: old) } }
+    }
+
+    func circlePhoto(_ c: StudyCircle) async -> UIImage? {
+        guard let path = c.photoPath, !path.isEmpty else { return nil }
+        if let img = photoCache[path] { return img }
+        if let d = try? Data(contentsOf: photoFile(path)), let img = UIImage(data: d) { photoCache[path] = img; return img }
+        guard let t = try? await token(), let d = try? await api.storageDownload(token: t, bucket: Self.bucket, path: path),
+              let img = UIImage(data: d) else { return nil }
+        photoCache[path] = img
+        savePhotoFile(path, d)
+        return img
     }
 
     // MARK: Teaching

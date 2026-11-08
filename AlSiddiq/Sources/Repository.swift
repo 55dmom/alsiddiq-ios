@@ -79,6 +79,11 @@ protocol AppRepository: AnyObject {
     /// v3.8 (admin only): «الميزانية» — add (empty id) or edit one income/expense entry; delete one.
     func saveBudgetEntry(_ e: BudgetEntry) async throws -> BudgetEntry
     func deleteBudgetEntry(_ id: String) async throws
+    /// v3.8 «كشف الاشتراكات»: the admin, or a teacher for his own circle's students. month = 'YYYY-MM-01'.
+    func saveSubscriptions(month: String, marks: [String: SubscriptionMark]) async throws -> Int
+    /// v3.8 «لوحة الحلقة»: the admin on any circle, a teacher on his own. jpeg nil = remove.
+    func setCirclePhoto(circleId: String, jpeg: Data?) async throws
+    func circlePhoto(_ c: StudyCircle) async -> UIImage?
     /// Set (jpeg) or remove (nil) the student's photo.
     func setStudentPhoto(studentId: String, jpeg: Data?) async throws
     /// The student's photo, cached on the phone.

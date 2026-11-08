@@ -13,7 +13,7 @@ struct AdminHome: View {
         let top = AdminHome.topStudents(snap, since: weekStart)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HomeHeader(greeting: "السلام عليكم ورحمة الله", title: snap.center.name,
+                HomeHeader(greeting: "السلام عليكم ورحمة الله وبركاته", title: snap.center.name,
                            subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))", unread: snap.unreadEvents + snap.unreadCount) { router.go(.adminEvents) }
                 VStack(alignment: .leading, spacing: 0) {
                     RoleStrip(user: user).padding(.top, 12)
@@ -35,6 +35,7 @@ struct AdminHome: View {
                         QuickAction(label: "كلمات السر", icon: "key") { router.go(.passwords) }
                     }
                     HonorsHomeCard(user: user).padding(.top, 12)
+                    WeeklyStarStrip().padding(.top, 10)   // v3.8 «وسام الشرف لهذا الأسبوع»
                     SectionHeader(title: "نشاط التسميع", action: "التقارير") { router.go(.reports) }
                     AppCard {
                         Text("عدد السجلات يومياً — آخر 14 يوماً").font(T.bodySmall).foregroundColor(Brand.muted)
@@ -111,12 +112,13 @@ struct TeacherHome: View {
         let recent = snap.recitations.filter { ids.contains($0.studentId) }.sorted { $0.recordedAt > $1.recordedAt }.prefix(6)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HomeHeader(greeting: "السلام عليكم", title: "قسم المعلمين", subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))",
+                HomeHeader(greeting: "السلام عليكم ورحمة الله وبركاته", title: "قسم المعلمين", subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))",
                            unread: snap.unreadCount) { router.go(.announcements) }
                 VStack(alignment: .leading, spacing: 0) {
                     RoleStrip(user: user).padding(.top, 12)
                     if model.isDemo { DemoBanner().padding(.top, 10) }
                     HonorsHomeCard(user: user).padding(.top, 12)
+                    WeeklyStarStrip().padding(.top, 10)   // v3.8 «وسام الشرف لهذا الأسبوع»
                     SectionHeader(title: "الحلقة")
                     if circles.isEmpty {
                         EmptyState(title: "لا توجد حلقات", message: "تنشئها الإدارة من الإعدادات ← الإدارة")

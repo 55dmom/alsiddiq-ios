@@ -104,6 +104,7 @@ struct HomeHeader: View {
                 RoundLogo(diameter: 46, padding: 3)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(greeting).font(T.bodySmall).foregroundColor(.white.opacity(0.75))
+                        .lineLimit(2).minimumScaleFactor(0.85).fixedSize(horizontal: false, vertical: true)
                     Text(title).font(T.titleLarge).foregroundColor(.white).lineLimit(1)
                 }
                 Spacer()

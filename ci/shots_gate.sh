@@ -47,6 +47,11 @@ if up "^iPhone SE \\(3rd|^iPhone SE|^iPhone 13 mini|^iPhone 12 mini|^iPhone 16e|
   EXTRA="-ciScrollTools NO" shot L6_se_tools_tab viewer tools 9
   EXTRA="-ciV38Demo YES" shot L7_se_teacher_attendance admin teacher_attendance 9
   EXTRA="-ciV38Demo YES" shot L8_se_budget admin budget 9
+  EXTRA="-ciV38Demo YES" shot L9_se_subscriptions_admin admin subscriptions 9
+  EXTRA="-ciV38Demo YES" shot M1_se_subscriptions_teacher teacher subscriptions 9
+  EXTRA="-ciV38Demo YES" shot M2_se_circles_thumbs admin circles 9
+  EXTRA="-ciV38Demo YES" shot M3_se_circle_banner teacher circle/c1 10
+  shot M4_se_teacher_home teacher home 9
 fi
 if up "^iPhone 1[4-9] Plus$|^iPhone 1[4-9] Pro Max$" "6.7in"; then
   xcrun simctl list devices | grep "CI 6.7in" > shots/device_67.txt || true

@@ -41,7 +41,7 @@ struct ViewerHome: View {
         let reports = Array(snap.announcements.sorted { $0.createdAt > $1.createdAt }.prefix(3))
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HomeHeader(greeting: "السلام عليكم ورحمة الله", title: snap.center.name.isEmpty ? model.centerName : snap.center.name,
+                HomeHeader(greeting: "السلام عليكم ورحمة الله وبركاته", title: snap.center.name.isEmpty ? model.centerName : snap.center.name,
                            subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))", unread: snap.unreadCount) { router.go(.announcements) }
                 VStack(alignment: .leading, spacing: 0) {
                     if model.isDemo { DemoBanner().padding(.top, 12) }
@@ -57,7 +57,7 @@ struct ViewerHome: View {
                     HStack(spacing: 10) {
                         StatTile(label: "الطلاب", value: "\(stats.students)", icon: "graduationcap", tint: Brand.navy) { router.go(.students) }
                         StatTile(label: "الحلقات", value: "\(snap.circles.count)", icon: "person.3", tint: Brand.maroon) { router.go(.circles) }
-                        StatTile(label: "المعلمون", value: "\(snap.teachers().count)", icon: "person.crop.rectangle", tint: Brand.gold)
+                        StatTile(label: "المعلمون", value: "\(snap.teachers().count)", icon: "rectangle.inset.filled.and.person.filled", tint: Brand.gold)
                     }.padding(.top, 10)
                     HStack(spacing: 10) {
                         StatTile(label: "المحفوظ (أجزاء)", value: Fmt.one(totalJuz), icon: "book.closed", tint: Brand.green, sub: "لكل الطلاب")
@@ -65,6 +65,7 @@ struct ViewerHome: View {
                         StatTile(label: "حضور اليوم", value: stats.attendanceToday > 0 ? Fmt.pct(stats.attendanceToday) : "—", icon: "checklist", tint: Brand.maroon)
                     }.padding(.top, 10)
                     HonorsHomeCard(user: user).padding(.top, 12)
+                    WeeklyStarStrip().padding(.top, 10)   // v3.8 «وسام الشرف لهذا الأسبوع»
                     SectionHeader(title: "التفاعل", action: "التقارير") { router.go(.reports) }
                     AppCard {
                         Text("عدد السجلات يومياً — آخر 14 يوماً").font(T.bodySmall).foregroundColor(Brand.muted)
@@ -163,9 +164,9 @@ struct ViewerSettingsScreen: View {
             SectionHeader(title: "عام")
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
-            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
-            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
-            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
+            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "info.circle", tint: Brand.maroon) { tools.show(.about) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "chevron.left.forwardslash.chevron.right") { tools.show(.developer) }
+            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "iphone") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {
                 dialogs.show(ConfirmDialog(title: "قفل التطبيق؟", message: "ستحتاج كلمة السر لفتحه مرة أخرى.", confirm: "قفل", destructive: true) {
                     Task { await model.repo.signOut(); model.pull() }
@@ -187,7 +188,7 @@ struct MoreScreen: View {
             RoleStrip(user: user)
             SectionHeader(title: "الحسابات وكلمات السر")
             MenuRow(title: "كلمات السر", sub: "العامة والإدارة", icon: "key.fill", tint: Brand.gold) { router.go(.passwords) }
-            MenuRow(title: "المعلمون", sub: "\(snap.teachers().count) معلم • لكل معلم كلمة سره وحلقته", icon: "person.crop.rectangle") { router.go(.teacherNames) }
+            MenuRow(title: "المعلمون", sub: "\(snap.teachers().count) معلم • لكل معلم كلمة سره وحلقته", icon: "rectangle.inset.filled.and.person.filled") { router.go(.teacherNames) }
             SectionHeader(title: "المركز")
             MenuRow(title: "الحلقات", sub: "\(snap.circles.count) حلقة", icon: "person.3") { router.go(.circles) }
             MenuRow(title: "الطلاب", sub: Fmt.students(snap.students.count), icon: "graduationcap") { router.go(.students) }
@@ -196,13 +197,14 @@ struct MoreScreen: View {
             MenuRow(title: "الإعلانات", sub: "\(snap.announcements.count) إعلان", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "المكافآت", sub: "النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "المتفوقون", sub: "اظهر تفوق الطالب", icon: "rosette", tint: Brand.gold) { router.go(.honors) }
-            MenuRow(title: "حضور وغياب المعلمين", sub: "حاضر / غائب لكل معلم، والسجل", icon: "person.crop.circle.badge.checkmark") { router.go(.teacherAttendance) }
-            MenuRow(title: "الميزانية", sub: "اشتراكات الطلاب، الصرف، والمتبقي", icon: "banknote", tint: Brand.green) { router.go(.budget) }
+            MenuRow(title: "حضور وغياب المعلمين", sub: "حاضر / غائب لكل معلم، والسجل", icon: "checklist", tint: Brand.maroon) { router.go(.teacherAttendance) }
+            MenuRow(title: "الميزانية", sub: "اشتراكات الطلاب، الصرف، والمتبقي", icon: "wallet.pass", tint: Brand.green) { router.go(.budget) }
+            MenuRow(title: "كشف الاشتراكات", sub: "سلم / لم يسلم لكل شهر", icon: "banknote", tint: Brand.green) { router.go(.subscriptions) }
             MenuRow(title: "بيانات المركز", sub: snap.center.name, icon: "building.columns") { router.go(.centerSettings) }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
-            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
-            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
-            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
+            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "info.circle", tint: Brand.maroon) { tools.show(.about) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "chevron.left.forwardslash.chevron.right") { tools.show(.developer) }
+            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "iphone") { router.go(.about) }
         }
     }
 }
@@ -222,11 +224,12 @@ struct TeacherMoreScreen: View {
             MenuRow(title: "الطلاب", sub: "كل الطلاب • تعديل طلاب حلقتك وصورهم", icon: "graduationcap") { router.go(.students) }
             MenuRow(title: "المكافآت", sub: "منح النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "التقارير", sub: "إحصائيات الحفظ والحضور", icon: "chart.bar.xaxis") { router.go(.reports) }
+            MenuRow(title: "كشف الاشتراكات", sub: "سلم / لم يسلم لطلاب حلقتك كل شهر", icon: "banknote", tint: Brand.green) { router.go(.subscriptions) }
             MenuRow(title: "الإعلانات", sub: "إعلانات المركز", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
-            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
-            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
-            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
+            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "info.circle", tint: Brand.maroon) { tools.show(.about) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "chevron.left.forwardslash.chevron.right") { tools.show(.developer) }
+            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "iphone") { router.go(.about) }
         }
     }
 }

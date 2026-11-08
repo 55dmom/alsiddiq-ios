@@ -12,6 +12,7 @@ enum Route: Hashable {
     case adminEvents, adminEvent(String)   // v3.6 the admin's bell
     case honors, honorPublish               // v3.7 «المتفوقون»
     case teacherAttendance, budget          // v3.8 admin only
+    case subscriptions                      // v3.8 «كشف الاشتراكات» (admin + teachers)
     case passwords, teacherNames
     case circleReport(String)
     case roleLogin(Role)
@@ -50,6 +51,7 @@ enum Route: Hashable {
         case "honor_publish": return .honorPublish
         case "teacher_attendance": return .teacherAttendance
         case "budget": return .budget
+        case "subscriptions": return .subscriptions
         case "passwords": return .passwords
         case "teachers", "teacher_names": return .teacherNames
         case "circle_report": return .circleReport(arg ?? "")

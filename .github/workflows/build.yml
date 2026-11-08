@@ -103,8 +103,25 @@ jobs:
       - name: Shoot (opening screen on iPhone SE and 6.7-inch; full passes are ci/shots.sh + ci/shots_sizes.sh)
         timeout-minutes: 20
         run: bash ci/shots_gate.sh "${{ steps.sim.outputs.udid }}"
-      - name: Unit tests (offline sync against a mock server)
+      - uses: actions/upload-artifact@v4
         if: always()
+        with:
+          name: screenshots
+          path: shots
+
+  tests:
+    runs-on: macos-15
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen && xcodegen generate
+      - name: Pick simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro')] or [x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')];print(c[-1]['udid'])")
+          echo "udid=$UDID" >> $GITHUB_OUTPUT
+      - name: Unit tests (offline sync against a mock server)
         timeout-minutes: 15
         run: |
           mkdir -p shots
@@ -113,11 +130,24 @@ jobs:
             CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" > shots/unit_tests.log 2>&1 || true
           grep -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)" shots/unit_tests.log | tail -40 > shots/unit_tests.txt || true
           cat shots/unit_tests.txt
-      - uses: actions/upload-artifact@v4
+      - name: UI test (demo data): every settings row, then «رجوع», lands back on its list
+        timeout-minutes: 15
+        run: |
+          mkdir -p shots
+          TEST_RUNNER_SHOTS_DIR="$PWD/shots" xcodebuild test -project AlSiddiq.xcodeproj -scheme AlSiddiq -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" -derivedDataPath dd -only-testing:AlSiddiqUITests/NavBackUITests \
+            CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" > shots/navback.log 2>&1 || true
+          grep -E "ALSIDDIQ_UITEST|error:|Test Case|Executed" shots/navback.log | tail -60 > shots/navback.txt || true
+          cat shots/navback.txt
+      - name: Publish test results (on this run's release once it exists)
         if: always()
-        with:
-          name: screenshots
-          path: shots
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 40); do gh release view "build-${{ github.run_number }}" --repo "${{ github.repository }}" > /dev/null 2>&1 && break; sleep 30; done
+          for f in shots/unit_tests.txt shots/navback.txt shots/navback_results.txt shots/N_*.png; do
+            [ -s "$f" ] && gh release upload "build-${{ github.run_number }}" "$f" --repo "${{ github.repository }}" --clobber || true
+          done
 
   live:
     if: ${{ inputs.live_check }}
@@ -222,7 +252,8 @@ jobs:
                        "70_67_mushaf_p1","71_67_mushaf_p3","72_67_mushaf_p552","73_67_mushaf_p3_bigger",
                        "85_hifz_recite_start","86_hifz_recite_progress","63_se_hifz_recite"], "ios_mushaf_hifz.jpg", cols2=5)
           small_sheet(["L1_se_password","L2_67_password","L3_se_admin_home_header","L4_se_viewer_settings","L5_se_admin_page",
-                       "L6_se_tools_tab","L7_se_teacher_attendance","L8_se_budget"], "ios_v38.jpg", cols2=4)
+                       "L6_se_tools_tab","L7_se_teacher_attendance","L8_se_budget","L9_se_subscriptions_admin","M1_se_subscriptions_teacher",
+                       "M2_se_circles_thumbs","M3_se_circle_banner","M4_se_teacher_home"], "ios_v38.jpg", cols2=4)
           small_sheet(["90_admin_home_bell","91_admin_events","92_admin_event_card","93_teacher_student_edit_dismiss",
                        "94_honors_viewer","95_honor_publish","96_honor_greeting"], "ios_students_honors.jpg", cols2=4)
           PY

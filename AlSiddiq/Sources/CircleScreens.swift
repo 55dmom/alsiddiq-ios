@@ -48,6 +48,8 @@ struct CircleDetailScreen: View {
                     .accessibilityLabel("تعديل")
             }
         }) {
+            CircleBanner(user: user, circle: circle)   // v3.8 «لوحة الحلقة» (nothing shown when none and not editable)
+            CircleStarLine(circleId: circle.id)        // v3.8 «نجم الحلقة لهذا الأسبوع»
             AppCard {
                 HStack(spacing: 12) {
                     Avatar(name: teacherName ?? "؟", size: 46, color: Brand.maroon)

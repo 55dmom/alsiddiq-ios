@@ -26,9 +26,7 @@ struct GateFrame<Content: View>: View {
                         .accessibilityLabel("رجوع")
                     }
                     Spacer()
-                    // no «الأدوات» button up here: the tools are below the card (his words, Nov 8)
-                    AboutButtonSmall()
-                    DeveloperButtonSmall()
+                    // no buttons up here any more (his words, Nov 8): «عن المركز» + «المطور» sit under the card
                 }
                 .frame(height: 44)
                 // the ORIGINAL logo inside a gold ring with a soft glow
@@ -68,6 +66,12 @@ struct GateFrame<Content: View>: View {
                 .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Lux.goldGradient, lineWidth: 0.8).opacity(0.9))
                 .shadow(color: .black.opacity(0.4), radius: 20, x: 0, y: 10)
                 .offset(y: shown ? 0 : 26)
+                // exactly two buttons under the card: «عن المركز» and «المطور» beside it (same as the Android app)
+                HStack(spacing: 10) {
+                    AboutButtonSmall()
+                    DeveloperButtonSmall()
+                }
+                .padding(.top, 14)
                 if model.isDemo {
                     Spacer().frame(height: 16)
                     DemoBanner()

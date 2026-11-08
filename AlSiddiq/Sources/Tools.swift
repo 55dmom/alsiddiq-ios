@@ -37,7 +37,7 @@ enum ToolItem: String, CaseIterable, Identifiable, Hashable {
         }
     }
     var icon: String {
-        switch self { case .about: return "info.circle"; case .developer: return "paperplane"; case .themes: return "paintpalette"; case .mushaf: return "book.closed"; case .hifz: return "brain.head.profile"; case .khatma: return "checkmark.seal"; case .prayer: return "clock"; case .adhkar: return "sun.and.horizon"; case .duas: return "hands.sparkles"; case .tasbeeh: return "hand.tap"; case .asma: return "sparkles" }
+        switch self { case .about: return "info.circle"; case .developer: return "chevron.left.forwardslash.chevron.right"; case .themes: return "paintpalette"; case .mushaf: return "book.closed"; case .hifz: return "brain.head.profile"; case .khatma: return "checkmark.seal"; case .prayer: return "clock"; case .adhkar: return "sun.and.horizon"; case .duas: return "hands.sparkles"; case .tasbeeh: return "hand.tap"; case .asma: return "sparkles" }
     }
     @ViewBuilder var screen: some View {
         switch self {
@@ -62,8 +62,12 @@ final class ToolsHost: ObservableObject {
     @Published var path: [ToolItem] = []
     /// The «الأدوات» tab's own stack (the bottom bar hides while a tool is open on it).
     @Published var tabPath: [ToolItem] = []
+    /// v3.8: opened straight on one page (a settings row, the opening screen's buttons or tools block):
+    /// that page is the root and «رجوع» closes it, back to exactly where he was (never the tools list).
+    @Published var direct: ToolItem? = nil
     func show(_ item: ToolItem? = nil) {
-        path = item.map { [$0] } ?? []
+        direct = item
+        path = []
         open = true
     }
 }
@@ -94,7 +98,7 @@ struct DeveloperButtonSmall: View {
     var body: some View {
         Button { tools.show(.developer) } label: {
             HStack(spacing: 5) {
-                Image(systemName: "paperplane.fill").font(.system(size: 14, weight: .semibold))
+                Image(systemName: "chevron.left.forwardslash.chevron.right").font(.system(size: 13, weight: .bold))
                 Text("المطور").font(T.labelLarge)
             }
             .foregroundColor(light ? .white : Brand.navy)
@@ -146,21 +150,41 @@ struct ToolsSheet: View {
         }
         .environmentObject(dialogs)
         .id(theme.active.id)
-        .tint(ToolItem.darkScreens.contains(tools.path.last ?? .themes) ? .white : Brand.navy)
+        .tint(ToolItem.darkScreens.contains(tools.path.last ?? tools.direct ?? .themes) ? .white : Brand.navy)
         .environment(\.layoutDirection, .rightToLeft)
         .preferredColorScheme(theme.active.palette.dark ? .dark : .light)
     }
 
-    private var stack: some View {
-        NavigationStack(path: $tools.path) {
-            ToolsMenuList()
-            .navigationDestination(for: ToolItem.self) { $0.screen }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("إغلاق") { tools.open = false }.foregroundColor(Brand.maroon)
-                }
+    @ViewBuilder private var stack: some View {
+        if let item = tools.direct {
+            NavigationStack(path: $tools.path) {
+                item.screen
+                    .navigationDestination(for: ToolItem.self) { $0.screen }
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button { tools.open = false } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.backward").font(.system(size: 16, weight: .semibold))
+                                    Text("رجوع")
+                                }
+                            }
+                            .accessibilityIdentifier("directBack")
+                        }
+                    }
+                    .navigationBarTitleDisplayMode(.inline)
             }
-            .navigationBarTitleDisplayMode(.inline)
+        } else {
+            NavigationStack(path: $tools.path) {
+                ToolsMenuList()
+                .navigationDestination(for: ToolItem.self) { $0.screen }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("إغلاق") { tools.open = false }.foregroundColor(Brand.maroon)
+                    }
+                }
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 }

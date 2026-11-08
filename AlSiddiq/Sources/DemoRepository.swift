@@ -69,7 +69,21 @@ final class DemoRepository: AppRepository {
         // v3.8: admin only
         s.teacherMarks = user.role == .admin ? (all.teacherMarks ?? []) : nil
         s.budget = user.role == .admin ? (all.budget ?? []) : nil
+        s.subscriptions = user.role == .viewer ? nil : (all.subscriptions ?? []).filter { sub in
+            user.role == .admin || Permissions.editableCircles(user, all).contains { $0.id == all.student(sub.studentId)?.circleId }
+        }
         #if DEBUG
+        // CI screenshots only: "-ciV38Demo YES" also marks a few of this month's subscriptions and gives the circles a «لوحة»
+        if user.role != .viewer, UserDefaults.standard.bool(forKey: "ciV38Demo"), (s.subscriptions ?? []).isEmpty {
+            let month = String(Days.iso(Days.today).prefix(7)) + "-01"
+            let mine = user.role == .admin ? s.students : s.students.filter { st in Permissions.editableCircles(user, s).contains { $0.id == st.circleId } }
+            s.subscriptions = mine.prefix(4).enumerated().map { k, x in
+                StudentSubscription(id: "ss-\(k)", studentId: x.id, month: month, paid: k != 2, amount: k != 2 ? Double(s.circle(x.circleId)?.feeYer ?? 5000) : nil)
+            }
+        }
+        if UserDefaults.standard.bool(forKey: "ciV38Demo") {
+            s.circles = s.circles.map { var c = $0; if c.photoPath == nil { c.photoPath = "ci/home_bg_real.jpg" }; return c }
+        }
         // CI screenshots only: "-ciV38Demo YES" fills a little sample teacher attendance and budget
         if user.role == .admin, UserDefaults.standard.bool(forKey: "ciV38Demo") {
             if (s.teacherMarks ?? []).isEmpty {
@@ -391,6 +405,38 @@ final class DemoRepository: AppRepository {
             try require(u.role == .admin)
             d.budget?.removeAll { $0.id == id }
         }
+    }
+
+    func saveSubscriptions(month: String, marks: [String: SubscriptionMark]) async throws -> Int {
+        try mutate { d, u in
+            for sid in marks.keys {
+                guard let s = d.student(sid) else { throw AppError.validation("الطالب غير موجود") }
+                try require(Permissions.canEditStudent(u, s, d))
+            }
+            var list = d.subscriptions ?? []
+            list.removeAll { $0.month == month && marks.keys.contains($0.studentId) }
+            d.subscriptions = marks.map { StudentSubscription(id: newId(), studentId: $0.key, month: month, paid: $0.value.paid, amount: $0.value.paid ? $0.value.amount : nil) } + list
+            return marks.count
+        }
+    }
+
+    func setCirclePhoto(circleId: String, jpeg: Data?) async throws {
+        try mutate { d, u in
+            guard let i = d.circles.firstIndex(where: { $0.id == circleId }) else { throw AppError.validation("الحلقة غير موجودة") }
+            try require(Permissions.canTakeAttendance(u, circleId, d))
+            d.circles[i].photoPath = jpeg == nil ? nil : "demo/circles/\(circleId)-\(Int(Date().timeIntervalSince1970)).jpg"
+        }
+        store.photos["circle/" + circleId] = jpeg
+        persist(); publish()
+    }
+
+    func circlePhoto(_ c: StudyCircle) async -> UIImage? {
+        guard let p = c.photoPath else { return nil }
+        if let d = store.photos["circle/" + c.id] { return UIImage(data: d) }
+        #if DEBUG
+        if p.hasPrefix("ci/"), let path = Bundle.main.path(forResource: "home_bg_real", ofType: "jpg") { return UIImage(contentsOfFile: path) }
+        #endif
+        return nil
     }
 
     // MARK: Teaching

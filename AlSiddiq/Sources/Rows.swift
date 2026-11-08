@@ -7,7 +7,7 @@ struct QuickAction: View {
     var body: some View {
         AppCard(padding: 10, onTap: onTap) {
             VStack(spacing: 6) {
-                IconBadge(icon: icon, tint: Brand.maroon, size: 40, circle: true)
+                IconBadge(icon: icon, tint: Brand.maroon, size: 40, circle: true, art: ArtIcon.forTitle(label))
                 Text(label).font(T.labelMedium).foregroundColor(Brand.ink).lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
@@ -24,7 +24,7 @@ struct MenuRow: View {
     var body: some View {
         AppCard(padding: 14, onTap: onTap) {
             HStack(spacing: 12) {
-                IconBadge(icon: icon, tint: tint, size: 40, bgOpacity: 0.1)
+                IconBadge(icon: icon, tint: tint, size: 40, bgOpacity: 0.1, art: ArtIcon.forTitle(title))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(T.titleSmall).foregroundColor(Brand.ink)
                     Text(sub).font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(1)
@@ -47,7 +47,14 @@ struct CircleCard: View {
         let present = att.filter { $0.status.isPresent }.count
         AppCard(padding: 14, onTap: onTap) {
             HStack(spacing: 12) {
-                IconBadge(icon: "person.3.fill", tint: Brand.navy, size: 46, corner: 14)
+                if c.photoPath != nil {
+                    // v3.8: the circle's «لوحة» as a round thumbnail
+                    CirclePhotoImage(circle: c) { IconBadge(icon: "person.3.fill", tint: Brand.navy, size: 46, corner: 14) }
+                        .frame(width: 46, height: 46).clipShape(SwiftUI.Circle())
+                        .overlay(SwiftUI.Circle().stroke(Brand.gold.opacity(0.5), lineWidth: 1))
+                } else {
+                    IconBadge(icon: "person.3.fill", tint: Brand.navy, size: 46, corner: 14)
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(c.name).font(T.titleSmall).foregroundColor(Brand.ink)
                     Text(snap.teacherName(of: c) ?? "بدون معلم").font(T.bodySmall).foregroundColor(Brand.muted)
@@ -60,6 +67,8 @@ struct CircleCard: View {
                     if !c.level.isEmpty { Pill(text: Fmt.level(c.level), color: Brand.maroon) }
                 }
             }
+            Spacer().frame(height: 10)
+            CircleStarLine(circleId: c.id, compact: true)   // v3.8
             if !att.isEmpty {
                 Spacer().frame(height: 10)
                 HStack(spacing: 8) {

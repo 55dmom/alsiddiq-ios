@@ -42,6 +42,8 @@ struct StudyCircle: Codable, Identifiable, Equatable, Hashable {
     var capacity: Int = 20
     var active: Bool = true
     var createdAt: Date = Date()
+    /// v3.8: the circle's photo «لوحة الحلقة» in the student-photos bucket (nil = the usual look).
+    var photoPath: String? = nil
 }
 
 enum StudentStatus: String, Codable, CaseIterable {
@@ -211,6 +213,8 @@ struct CenterSnapshot: Codable, Equatable {
     /// v3.8 (admin only; nil for everyone else): «حضور وغياب المعلمين» and «الميزانية».
     var teacherMarks: [TeacherMark]? = nil
     var budget: [BudgetEntry]? = nil
+    /// v3.8 «كشف الاشتراكات»: the admin gets every student's months, a teacher his own circle's; nil for the general view.
+    var subscriptions: [StudentSubscription]? = nil
 
     func member(_ id: String?) -> Member? { members.first { $0.id == id } }
     func circle(_ id: String?) -> StudyCircle? { circles.first { $0.id == id } }

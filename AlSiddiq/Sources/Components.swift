@@ -107,13 +107,36 @@ struct IconBadge: View {
     var corner: CGFloat = 12
     var circle = false
     var bgOpacity = 0.12
+    /// v3.8: an illustrated picture from the asset catalog («art_<name>»); the SF Symbol stays as the fallback.
+    var art: String? = nil
     var body: some View {
         ZStack {
             if circle { SwiftUI.Circle().fill(tint.opacity(bgOpacity)) }
             else { RoundedRectangle(cornerRadius: corner, style: .continuous).fill(tint.opacity(bgOpacity)) }
-            Image(systemName: icon).font(.system(size: size * 0.48, weight: .medium)).foregroundColor(tint)
+            if let a = art, let ui = UIImage(named: "art_" + a) {
+                Image(uiImage: ui).resizable().scaledToFit().padding(size * 0.08)
+            } else {
+                Image(systemName: icon).font(.system(size: size * 0.48, weight: .medium)).foregroundColor(tint)
+            }
         }
         .frame(width: size, height: size)
+    }
+}
+
+/// v3.8: which illustrated picture goes with a button, by its title (the same set as the Android app).
+enum ArtIcon {
+    static func forTitle(_ t: String) -> String? {
+        let map: [(String, String)] = [
+            ("حضور وغياب المعلمين", "teacher_attendance"), ("كشف الاشتراكات", "subscriptions"), ("الميزانية", "budget"),
+            ("طالب جديد", "add_student"), ("حلقة جديدة", "add_circle"), ("تسميع", "tasmee"), ("تسجيل", "record"),
+            ("الحضور", "attendance"), ("حضور اليوم", "attendance"), ("تحضير", "attendance"),
+            ("الطلاب", "students"), ("طلاب الحلقة", "students"), ("الحلقات", "circles"), ("المعلمون", "teachers"), ("المعلمين", "teachers"),
+            ("التقارير", "reports"), ("تقرير اليوم", "reports"), ("الإعلانات", "announcement"), ("المتفوقون", "honors"),
+            ("المكافآت", "honors"), ("وسام الشرف", "weekly_star"), ("عن المركز", "about"), ("تواصل مع المطوّر", "developer"),
+            ("الثيمات", "themes"), ("الأدوات", "tools"), ("الإدارة", "admin"), ("كلمات السر", "admin"), ("الإعدادات", "settings"),
+            ("الإشعارات", "bell"), ("بيانات المركز", "about"), ("عن التطبيق", "about"),
+        ]
+        return map.first { t.hasPrefix($0.0) }?.1
     }
 }
 
@@ -126,7 +149,7 @@ struct StatTile: View {
     var onTap: (() -> Void)? = nil
     var body: some View {
         AppCard(padding: 14, onTap: onTap) {
-            IconBadge(icon: icon, tint: tint, size: 38)
+            IconBadge(icon: icon, tint: tint, size: 38, art: ArtIcon.forTitle(label))
             Spacer().frame(height: 10)
             Text(value).font(T.headlineSmall).foregroundColor(Brand.ink).lineLimit(1).minimumScaleFactor(0.7)
             Text(label).font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(1)

@@ -258,6 +258,8 @@ struct MainShell: View {
         case .honorPublish: HonorPublishScreen(user: user)
         case .teacherAttendance:
             if user.role == .admin { TeacherAttendanceScreen(user: user) } else { EmptyState(title: "للإدارة فقط", message: "هذه الصفحة تظهر للإدارة فقط") }
+        case .subscriptions:
+            if user.role != .viewer { SubscriptionsScreen(user: user) } else { EmptyState(title: "للإدارة والمعلمين", message: "هذه الصفحة للإدارة والمعلمين فقط") }
         case .budget:
             if user.role == .admin { BudgetScreen(user: user) } else { EmptyState(title: "للإدارة فقط", message: "هذه الصفحة تظهر للإدارة فقط") }
         case .passwords: PasswordsScreen(user: user)
