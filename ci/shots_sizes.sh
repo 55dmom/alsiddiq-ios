@@ -11,10 +11,18 @@ devtype() { xcrun simctl list devicetypes -j | python3 -c "import json,sys,re;p=
 U=""
 up() { # pattern label
   [ -n "$U" ] && { t 30 xcrun simctl shutdown "$U" 2>/dev/null || true; }
-  local TYPE; TYPE=$(devtype "$1")
-  echo "runtime $RT type $TYPE"
-  [ -n "$TYPE" ] || { echo "no device type for $1"; U=""; return 1; }
-  U=$(xcrun simctl create "CI $2" "$TYPE" "$RT")
+  # the first device type of the list ("a|b|c") that this runtime can create
+  local TYPE="" P
+  U=""
+  IFS='|' read -ra PATS <<< "$1"
+  for P in "${PATS[@]}"; do
+    TYPE=$(devtype "$P")
+    [ -n "$TYPE" ] || { echo "no device type for $P"; continue; }
+    U=$(xcrun simctl create "CI $2" "$TYPE" "$RT" 2>/dev/null) && [ -n "$U" ] && break
+    echo "runtime $RT cannot create $TYPE"; U=""
+  done
+  [ -n "$U" ] || { echo "no small device for $1"; return 1; }
+  echo "runtime $RT type $TYPE" | tee -a shots/device_small.txt
   t 120 xcrun simctl boot "$U" || true
   t 600 xcrun simctl bootstatus "$U" -b || echo "bootstatus did not finish"
   t 30 xcrun simctl status_bar "$U" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
@@ -29,7 +37,7 @@ shot() { # name who route wait
   t 30 xcrun simctl io "$U" screenshot "shots/$1.png" > /dev/null 2>&1
   echo "shot $1"
 }
-if up "^iPhone SE" "iPhone SE"; then
+if up "^iPhone SE \\(3rd|^iPhone SE|^iPhone 13 mini|^iPhone 12 mini|^iPhone 16e|^iPhone 17e" "iPhone SE"; then
   shot 50_se_admin_home admin home 10
   shot 51_se_teacher_home teacher home 8
   shot 52_se_viewer_home viewer home 8
