@@ -48,7 +48,7 @@ struct RootView: View {
         }
         .environmentObject(dialogs)
         .environmentObject(tools)
-        .sheet(isPresented: $tools.open) { ToolsSheet().environmentObject(tools) }
+        .sheet(isPresented: $tools.open) { ToolsSheet().environmentObject(tools).environmentObject(model) }
         .environment(\.layoutDirection, .rightToLeft)
         .environment(\.locale, Locale(identifier: "ar"))
         .preferredColorScheme(theme.active.palette.dark ? .dark : .light)

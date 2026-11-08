@@ -6,6 +6,8 @@ enum BackendMode { case demo, cloud }
 
 enum SyncState: Equatable {
     case localOnly, synced, pending(Int), error(String)
+    /// v3.2: writes kept on the phone after their login ended; they go up after that section's password is typed again.
+    case waitingPassword(Int, Role)
 }
 
 /// v3 access (same as the Android app): there are no usernames or phone numbers. One password field;
@@ -23,6 +25,8 @@ protocol AppRepository: AnyObject {
     /// Everything the current user is allowed to see; `onChange` fires when it moves.
     var snapshot: CenterSnapshot { get }
     var syncState: SyncState { get }
+    /// v3.2: this record/row is still on the phone only («بانتظار الإرسال»).
+    func isPending(_ id: String) -> Bool
     var onChange: (() -> Void)? { get set }
 
     /// True when no admin password exists yet (first-time setup). nil = unknown (offline).
@@ -44,9 +48,21 @@ protocol AppRepository: AnyObject {
     func updateCenter(_ info: CenterInfo) async throws
     /// Change the general (.viewer), the .admin or the shared .teacher password.
     func setAccessPassword(target: Role, password: String) async throws
-    /// The admin's list of teacher NAMES (for "who recorded"); no passwords.
-    func saveTeacherName(id: String?, name: String) async throws
-    func removeTeacherName(_ id: String) async throws
+    /// v3.3: the admin adds / edits a teacher account (name, his circle, his own password — required when new).
+    func saveTeacher(id: String?, name: String, circleId: String?, password: String?) async throws -> Member
+    /// v3.3: disable a teacher (he can no longer sign in; his past entries keep his name).
+    func removeTeacher(_ id: String) async throws
+
+    // v3.4 «عن المركز» (public; admin edits). Falls back to his bundled text/photo; cached offline.
+    var aboutCenter: AboutInfo { get }
+    func refreshAbout() async
+    func aboutPhoto(_ path: String) async -> UIImage?
+    func saveAboutText(_ text: String) async throws
+    func addAboutPhoto(_ jpeg: Data) async throws
+    func removeAboutPhoto(_ path: String) async throws
+    func saveAboutButton(_ b: AboutButton) async throws
+    func deleteAboutButton(_ id: String) async throws
+    func moveAboutButton(_ id: String, up: Bool) async throws
     func saveCircle(_ c: StudyCircle) async throws -> StudyCircle
     func deleteCircle(_ id: String) async throws
     func saveStudent(_ s: Student) async throws -> Student
@@ -102,8 +118,8 @@ enum Passwords {
 
 /// Photos: about 512 px on the long side, JPEG.
 enum PhotoTools {
-    static func jpeg512(_ image: UIImage) -> Data? {
-        let maxSide: CGFloat = 512
+    static func jpeg512(_ image: UIImage) -> Data? { jpeg(image, maxSide: 512) }
+    static func jpeg(_ image: UIImage, maxSide: CGFloat) -> Data? {
         let s = image.size
         let scale = min(1, maxSide / max(s.width, s.height, 1))
         let target = CGSize(width: max(1, (s.width * scale).rounded()), height: max(1, (s.height * scale).rounded()))

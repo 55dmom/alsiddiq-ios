@@ -19,7 +19,7 @@ private struct AttendanceTaking: View {
 
     var body: some View {
         let snap = model.snap
-        let circles = Permissions.visibleCircles(user, snap)
+        let circles = Permissions.editableCircles(user, snap)   // v3.3: attendance in his own circle(s) only
         let idx = circleIdx >= 0 ? circleIdx : max(circles.firstIndex { $0.id == circleId } ?? 0, 0)
         let circle = circles.indices.contains(idx) ? circles[idx] : nil
         let students = circle.map { c in snap.studentsIn(c.id).sorted { $0.fullName < $1.fullName } } ?? []

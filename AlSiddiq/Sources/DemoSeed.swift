@@ -33,11 +33,13 @@ struct DemoStore: Codable {
 
 /// Sample data for design and testing only. Never used once the central database is connected.
 enum DemoSeed {
-    static let version = 4
-    /// Demo passwords (sample data only): general view, admin, teachers (same as the Android demo).
+    static let version = 5
+    /// Demo passwords (sample data only): general view, admin, and each teacher's own (v3.3).
     static let viewerPassword = "111111"
     static let adminPassword = "222222"
-    static let teacherPassword = "333333"
+    static let teacherPassword = "333333"   // الشيخ عبدالله الحربي (حلقة أبي بكر + حلقة الفجر)
+    static let teacher2Password = "444444"  // الأستاذ خالد العمري (حلقة عمر)
+    static let teacher3Password = "555555"  // الأستاذ ياسر القحطاني (حلقة البراعم)
 
     static func create() -> DemoStore {
         var rnd = SeededRandom(7)
@@ -46,16 +48,19 @@ enum DemoSeed {
 
         let admin = Member(id: "m-admin", fullName: "الإدارة", role: .admin)
         let viewer = Member(id: "m-viewer", fullName: "عرض عام", role: .viewer)
-        let teachers = Member(id: "m-teachers", fullName: "المعلمون", role: .teacher)
-        let t1 = TeacherName(id: "m-t1", name: "الشيخ عبدالله الحربي")
-        let t2 = TeacherName(id: "m-t2", name: "الأستاذ خالد العمري")
-        let t3 = TeacherName(id: "m-t3", name: "الأستاذ ياسر القحطاني")
+        // v3.3: each teacher is his own account with his own password and circle.
+        let m1 = Member(id: "m-t1", fullName: "الشيخ عبدالله الحربي", role: .teacher)
+        let m2 = Member(id: "m-t2", fullName: "الأستاذ خالد العمري", role: .teacher)
+        let m3 = Member(id: "m-t3", fullName: "الأستاذ ياسر القحطاني", role: .teacher)
+        let t1 = TeacherName(id: m1.id, name: m1.fullName)
+        let t2 = TeacherName(id: m2.id, name: m2.fullName)
+        let t3 = TeacherName(id: m3.id, name: m3.fullName)
 
         let circles = [
-            StudyCircle(id: "c1", name: "حلقة أبي بكر الصديق", teacherId: nil, teacherName: t1.name, level: "متقدم", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
-            StudyCircle(id: "c2", name: "حلقة عمر بن الخطاب", teacherId: nil, teacherName: t2.name, level: "متوسط", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
-            StudyCircle(id: "c3", name: "حلقة البراعم", teacherId: nil, teacherName: t3.name, level: "تمهيدي", schedule: "بعد المغرب • الأحد–الخميس", capacity: 20),
-            StudyCircle(id: "c4", name: "حلقة الفجر للكبار", teacherId: nil, teacherName: t1.name, level: "مراجعة", schedule: "بعد الفجر • يومياً", capacity: 12)
+            StudyCircle(id: "c1", name: "حلقة أبي بكر الصديق", teacherId: "m-t1", teacherName: t1.name, level: "متقدم", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
+            StudyCircle(id: "c2", name: "حلقة عمر بن الخطاب", teacherId: "m-t2", teacherName: t2.name, level: "متوسط", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
+            StudyCircle(id: "c3", name: "حلقة البراعم", teacherId: "m-t3", teacherName: t3.name, level: "تمهيدي", schedule: "بعد المغرب • الأحد–الخميس", capacity: 20),
+            StudyCircle(id: "c4", name: "حلقة الفجر للكبار", teacherId: "m-t1", teacherName: t1.name, level: "مراجعة", schedule: "بعد الفجر • يومياً", capacity: 12)
         ]
         let names = [
             "محمد السالمي", "أحمد الزهراني", "عبدالرحمن الشهري", "يوسف الغامدي", "عمر الدوسري",
@@ -72,7 +77,7 @@ enum DemoSeed {
                 goalJuz: circle.id == "c3" ? 3 : (circle.id == "c4" ? 30 : 10)
             )
         }
-        let members = [admin, viewer, teachers]
+        let members = [admin, viewer, m1, m2, m3]
         let tnames = [t1, t2, t3]
 
         var recs: [Recitation] = []
@@ -83,7 +88,7 @@ enum DemoSeed {
         let grades = Grade.allCases
         for (idx, s) in students.enumerated() {
             let circle = circles.first { $0.id == s.circleId }!
-            let teacher = teachers.id
+            let teacher = circle.teacherId ?? m1.id
             let byName = circle.teacherName ?? ""
             var surah = circle.id == "c3" ? 114 : (circle.id == "c4" ? 2 : 1 + (idx % 3))
             var ayah = 1
@@ -125,14 +130,15 @@ enum DemoSeed {
         }
         let now = Date()
         let announcements = [
-            Announcement(id: "n0", title: "تقرير حلقة أبي بكر الصديق — \(Days.iso(today))", body: "حفظ اليوم: 5 طلاب • 38 آية\nالغائبون: أنس الحارثي", audience: .all, createdBy: teachers.id, createdAt: now.addingTimeInterval(-3 * 3600)),
+            Announcement(id: "n0", title: "تقرير حلقة أبي بكر الصديق — \(Days.iso(today))", body: "حفظ اليوم: 5 طلاب • 38 آية\nالغائبون: أنس الحارثي", audience: .all, createdBy: m1.id, createdAt: now.addingTimeInterval(-3 * 3600)),
             Announcement(id: "n1", title: "مسابقة الحفظ الشهرية", body: "تبدأ مسابقة المركز الشهرية يوم الخميس القادم بعد العصر، والجوائز للمراكز الثلاثة الأولى في كل حلقة.", audience: .all, createdBy: admin.id, createdAt: now.addingTimeInterval(-2 * day)),
             Announcement(id: "n3", title: "تحديث خطة المراجعة", body: "اعتماد مراجعة جزء كامل أسبوعياً لطلاب الحلقات المتقدمة.", audience: .teachers, createdBy: admin.id, createdAt: now.addingTimeInterval(-6 * day))
         ]
         let data = CenterSnapshot(center: CenterInfo(), members: members, circles: circles, students: students,
                                   recitations: recs, attendance: att, rewards: rewards,
                                   announcements: announcements, notifications: [], teacherNames: tnames)
-        let hashes = [admin.id: sha256(adminPassword), viewer.id: sha256(viewerPassword), teachers.id: sha256(teacherPassword)]
+        let hashes = [admin.id: sha256(adminPassword), viewer.id: sha256(viewerPassword), m1.id: sha256(teacherPassword),
+                      m2.id: sha256(teacher2Password), m3.id: sha256(teacher3Password)]
         return DemoStore(data: data, passwordHashes: hashes, currentUserId: nil, seedVersion: version)
     }
 }

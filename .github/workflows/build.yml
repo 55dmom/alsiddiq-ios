@@ -101,8 +101,18 @@ jobs:
             2>&1 | tee sim.log | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" || true
           grep -q "BUILD SUCCEEDED" sim.log
       - name: Shoot
-        timeout-minutes: 20
+        timeout-minutes: 25
         run: bash ci/shots.sh "${{ steps.sim.outputs.udid }}"
+      - name: Unit tests (offline sync against a mock server)
+        if: always()
+        timeout-minutes: 15
+        run: |
+          mkdir -p shots
+          xcodebuild test -project AlSiddiq.xcodeproj -scheme AlSiddiq -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" -derivedDataPath dd -only-testing:AlSiddiqTests \
+            CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" > shots/unit_tests.log 2>&1 || true
+          grep -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)" shots/unit_tests.log | tail -40 > shots/unit_tests.txt || true
+          cat shots/unit_tests.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -35,7 +35,7 @@ struct CircleDetailScreen: View {
 
     private func content(_ circle: StudyCircle, _ snap: CenterSnapshot) -> some View {
         let students = snap.studentsIn(circle.id).sorted { $0.fullName < $1.fullName }
-        let canTeach = Permissions.canTakeAttendance(user)
+        let canTeach = Permissions.canTakeAttendance(user, circle.id, snap)
         let ids = Set(students.map { $0.id })
         let weekStart = Days.add(Days.today, -6)
         let weekRecs = snap.recitations.filter { ids.contains($0.studentId) && Days.dayOf($0.recordedAt) >= weekStart }
@@ -64,13 +64,22 @@ struct CircleDetailScreen: View {
                     MiniStat(label: "آيات الأسبوع", value: "\(weekRecs.reduce(0) { $0 + Stats.ayatOf($1) })")
                 }
             }
+            if user.role == .teacher && !canTeach {
+                HStack(spacing: 8) {
+                    Image(systemName: "eye").foregroundColor(Brand.goldInk)
+                    Text("ليست حلقتك: للعرض فقط").font(T.labelLarge).foregroundColor(Brand.goldInk)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Capsule().fill(Brand.goldSoft))
+                .accessibilityIdentifier("viewOnlyCircle")
+            }
             if canTeach {
                 HStack(spacing: 10) {
                     PrimaryButton(title: "تحضير اليوم", icon: "checklist", height: 48) { router.go(.attendance(circle.id)) }
                     OutlineButton(title: "تقرير اليوم", icon: "doc.text") { router.go(.circleReport(circle.id)) }
                 }
             }
-            SectionHeader(title: "الطلاب" + (canTeach ? " — اضغط لتسجيل التسميع" : ""), action: Permissions.canEditStudents(user) ? "إضافة طالب" : nil) {
+            SectionHeader(title: "الطلاب" + (canTeach ? " — اضغط لتسجيل التسميع" : ""), action: canTeach ? "إضافة طالب" : nil) {
                 router.go(.studentEdit("new", circle.id))
             }
             if students.isEmpty { EmptyState(title: "لا يوجد طلاب في الحلقة", message: "أضف طلاباً من شاشة الطلاب") }
@@ -101,6 +110,7 @@ struct CircleEditScreen: View {
     @State private var loaded = false
     @State private var name = ""
     @State private var teacherName: String?
+    @State private var teacherId: String?
     @State private var level = ""
     @State private var schedule = ""
     @State private var capacity = "15"
@@ -116,6 +126,7 @@ struct CircleEditScreen: View {
                     SelectorField(label: "المعلم (اختياري)", value: teacherName ?? "اختر المعلم") {
                         dialogs.show(PickerDialog(title: "اختر المعلم", items: [TeacherName(id: "", name: "بدون معلم")] + snap.teachers(), label: { $0.name }) {
                             teacherName = $0.id.isEmpty ? nil : $0.name
+                            teacherId = $0.id.isEmpty ? nil : $0.id
                         })
                     }
                     Text("المستوى").font(T.labelMedium).foregroundColor(Brand.muted).padding(.top, 2)
@@ -128,6 +139,7 @@ struct CircleEditScreen: View {
                 var c = existing ?? StudyCircle(id: "", name: "", teacherId: nil)
                 c.name = name.trimmingCharacters(in: .whitespaces)
                 c.teacherName = teacherName
+                c.teacherId = teacherId   // v3.3: the teacher ACCOUNT who may edit this circle
                 c.level = level
                 c.schedule = schedule.trimmingCharacters(in: .whitespaces)
                 c.capacity = Int(capacity) ?? 15
@@ -145,7 +157,7 @@ struct CircleEditScreen: View {
             guard !loaded else { return }
             loaded = true
             if let e = model.snap.circle(id) {
-                name = e.name; teacherName = model.snap.teacherName(of: e); level = e.level; schedule = e.schedule; capacity = String(e.capacity)
+                name = e.name; teacherName = model.snap.teacherName(of: e); teacherId = e.teacherId; level = e.level; schedule = e.schedule; capacity = String(e.capacity)
             }
         }
     }

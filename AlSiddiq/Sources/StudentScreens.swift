@@ -18,11 +18,11 @@ struct StudentsScreen: View {
             let matches = needle.isEmpty || s.fullName.contains(needle) || s.phone.contains(needle)
             return inCircle && matches
         }
-        ScreenList(title: "الطلاب", fab: Permissions.canEditStudents(user) ? Fab(label: "طالب جديد") { router.go(.studentEdit("new", nil)) } : nil) {
+        ScreenList(title: "الطلاب", fab: Permissions.canEditStudents(user, snap) ? Fab(label: "طالب جديد") { router.go(.studentEdit("new", nil)) } : nil) {
             SearchField(placeholder: "بحث باسم الطالب", text: $q)
             ChoiceChips(options: options, selected: circleIdx) { circleIdx = $0 }
             Text("\(list.count) طالب").font(T.labelMedium).foregroundColor(Brand.muted)
-            if list.isEmpty { EmptyState(title: "لا يوجد طلاب", message: needle.isEmpty ? (Permissions.canEditStudents(user) ? "أضف أول طالب للمركز" : "تضيفهم الإدارة أو المعلمون") : "لا نتائج مطابقة للبحث") }
+            if list.isEmpty { EmptyState(title: "لا يوجد طلاب", message: needle.isEmpty ? (Permissions.canEditStudents(user, snap) ? "أضف أول طالب للمركز" : "تضيفهم الإدارة أو المعلمون") : "لا نتائج مطابقة للبحث") }
             ForEach(list) { s in
                 StudentRow(s: s, snap: snap, onTap: { router.go(.student(s.id)) }) {
                     Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold)).foregroundColor(Brand.muted)
@@ -169,7 +169,7 @@ struct StudentEditScreen: View {
                         Field(label: "الهدف (أجزاء)", text: Binding(get: { goal }, set: { v in goal = String(v.filter { $0.isNumber }.prefix(2)) }), keyboard: .numberPad)
                     }
                     SelectorField(label: "الحلقة", value: snap.circle(circleId)?.name ?? "اختر الحلقة") {
-                        dialogs.show(PickerDialog(title: "اختر الحلقة", items: snap.circles, label: { $0.name }) { circleId = $0.id })
+                        dialogs.show(PickerDialog(title: "اختر الحلقة", items: Permissions.editableCircles(user, snap), label: { $0.name }) { circleId = $0.id })
                     }
                     Text("الحالة").font(T.labelMedium).foregroundColor(Brand.muted).padding(.top, 2)
                     ChoiceChips(options: StudentStatus.allCases.map { $0.label }, selected: StudentStatus.allCases.firstIndex(of: status) ?? 0) { status = StudentStatus.allCases[$0] }

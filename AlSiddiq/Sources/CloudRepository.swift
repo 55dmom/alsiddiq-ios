@@ -1,6 +1,10 @@
 import Foundation
+import Network
 import UIKit
 import UserNotifications
+
+/// The login ended on the server (expired / password changed); queued writes were parked, not dropped.
+struct SessionEndedError: LocalizedError { var errorDescription: String? { "انتهت الجلسة، اكتب كلمة السر مرة أخرى" } }
 
 /// One write waiting to reach the server (kept on disk, so it survives app restarts and no network).
 struct PendingOp: Codable, Equatable {
@@ -11,6 +15,11 @@ struct PendingOp: Codable, Equatable {
     var filter: String = ""
     var onConflict: String = "id"
     var ignoreDuplicates: Bool = false
+    /// v3.2: which section queued it (admin | teachers) and when; optional so older saved queues still load.
+    var kind: String? = nil
+    var at: Date? = nil
+    /// The server's words when it refused this write (kept, never silently dropped).
+    var refused: String? = nil
 }
 
 private struct CloudState: Codable {
@@ -23,8 +32,15 @@ private struct CloudState: Codable {
     var centerId: String?
     var cache = CenterSnapshot()
     var outbox: [PendingOp] = []
+    /// v3.2: queued writes whose login ended (expired / password changed / section left offline). Never dropped:
+    /// they go up after that section's password is typed again.
+    var parked: [PendingOp]? = nil
+    /// Writes the server refused while they were being sent later (kept for the record; shown on the sync line).
+    var refusedOps: [PendingOp]? = nil
     var lastSyncAt: Date?
     var seenNotificationIds: [String] = []
+    /// v3.4: the last fetched «عن المركز» (offline copy).
+    var about: AboutInfo? = nil
 }
 
 /// The real backend: the central Postgres database (Supabase) with server-side security rules —
@@ -45,19 +61,67 @@ final class CloudRepository: AppRepository {
     var baseUser: Member? { st.baseMe }
     var centerName: String { st.centerName }
     private var photoCache: [String: UIImage] = [:]
+    private let pathMonitor = NWPathMonitor()
     var snapshot: CenterSnapshot { st.cache }
-    var syncState: SyncState { st.outbox.isEmpty ? .synced : .pending(st.outbox.count) }
+    var syncState: SyncState {
+        if !st.outbox.isEmpty { return .pending(st.outbox.count) }
+        if let p = st.parked, !p.isEmpty {
+            return .waitingPassword(p.count, p.contains { $0.kind == "admin" } ? .admin : .teacher)
+        }
+        if let r = st.refusedOps, !r.isEmpty { return .error("\(r.count) لم يقبلها الخادم") }
+        return .synced
+    }
 
-    init(config: CloudConfig) {
+    func isPending(_ id: String) -> Bool {
+        (st.outbox + (st.parked ?? [])).contains { $0.body.contains("\"\(id)\"") || $0.filter.contains(id) }
+    }
+
+    /// Replace the login state but keep what must survive it: parked and refused writes.
+    private func replace(_ new: CloudState) {
+        let parked = st.parked, refused = st.refusedOps
+        st = new
+        st.parked = parked
+        st.refusedOps = refused
+    }
+
+    /// The current login is ending: its queued writes wait for the same section's password (never dropped).
+    private func parkOutbox() {
+        guard !st.outbox.isEmpty else { return }
+        let who = st.me?.role.dbValue
+        let ops = st.outbox.map { op -> PendingOp in var o = op; if o.kind == nil { o.kind = who }; return o }
+        st.parked = (st.parked ?? []) + ops
+        st.outbox = []
+    }
+
+    /// A login opened: writes parked for this section (or any, for the admin) go back in the queue and are sent.
+    private func unparkFor(_ me: Member) {
+        guard let p = st.parked, !p.isEmpty, me.role != .viewer else { return }
+        let mine = p.filter { me.role == .admin || $0.kind == me.role.dbValue || $0.kind == nil }
+        guard !mine.isEmpty else { return }
+        st.outbox = mine + st.outbox
+        let ids = Set(mine.map { $0.id })
+        st.parked = p.filter { !ids.contains($0.id) }
+        save()
+    }
+
+    init(config: CloudConfig, stateFile: String = "cloud_state_v3.json") {
         api = SupabaseAPI(config: config)
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        fileURL = dir.appendingPathComponent("cloud_state_v3.json")
+        fileURL = dir.appendingPathComponent(stateFile)
         if let data = try? Data(contentsOf: fileURL), let s = try? JSONDecoder().decode(CloudState.self, from: data) {
             st = s
         } else {
             st = CloudState()
         }
+        // v3.2: the moment the network comes back, send what is queued.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in
+                if let self = self, self.st.session != nil, !self.st.outbox.isEmpty { try? await self.syncNow() }
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "alsiddiq.net"))
         // Sync loop while the app runs: every 30 s, and whenever the app comes back to the foreground.
         loop = Task { [weak self] in
             while !Task.isCancelled {
@@ -88,13 +152,15 @@ final class CloudRepository: AppRepository {
         } catch let e as APIError {
             if (400...499).contains(e.code) {
                 // This login was ended on the server (its password was changed): drop it.
+                // v3.2: anything still queued waits for this section's password again (never dropped).
+                parkOutbox()
                 if let b = st.baseSession, b != s {
                     st.session = b; st.me = st.baseMe; st.baseSession = nil; st.baseMe = nil
-                    st.cache = CenterSnapshot(center: st.cache.center); st.outbox = []
                 } else {
-                    st = CloudState(centerName: st.centerName)
+                    replace(CloudState(centerName: st.centerName, cache: st.cache))
                 }
                 save(); publish()
+                throw SessionEndedError()
             }
             throw e
         }
@@ -128,11 +194,15 @@ final class CloudRepository: AppRepository {
         if keepBase && me.role != .viewer {
             if st.me?.role == .viewer { base = st.session; baseMe = st.me } else { base = st.baseSession; baseMe = st.baseMe }
         }
-        st = CloudState(session: s, me: me, baseSession: base, baseMe: baseMe, centerName: name, centerId: nil)
+        let keptCache = st.cache
+        parkOutbox()   // a different login now: what the previous one queued waits for its own password
+        replace(CloudState(session: s, me: me, baseSession: base, baseMe: baseMe, centerName: name, centerId: nil, cache: keptCache))
         save()
         if let rows = try? await api.selectAll(token: s.accessToken, table: "centers", query: "select=id"), let c = rows.first?["id"] as? String {
             st.centerId = c; save()
         }
+        unparkFor(me)
+        try? await flushOutbox()
         try? await reload()
         // Don't raise phone notifications for what was already waiting before this sign-in.
         st.seenNotificationIds = st.cache.notifications.map { $0.id }
@@ -166,12 +236,14 @@ final class CloudRepository: AppRepository {
     }
 
     func leaveRole() async {
+        // v3.2: send what is queued first; offline, it waits (parked) for this section's password.
+        if !st.outbox.isEmpty { try? await flushOutbox() }
+        parkOutbox()
         let t = st.session?.accessToken
         if let b = st.baseSession {
             st.session = b; st.me = st.baseMe; st.baseSession = nil; st.baseMe = nil
-            st.cache = CenterSnapshot(center: st.cache.center); st.outbox = []
         } else {
-            st = CloudState(centerName: st.centerName)
+            replace(CloudState(centerName: st.centerName, cache: st.cache))
         }
         save(); publish()
         if let t = t { Task { await api.signOut(token: t) } }
@@ -180,7 +252,9 @@ final class CloudRepository: AppRepository {
 
     func signOut() async {
         let ts = [st.session?.accessToken, st.baseSession?.accessToken].compactMap { $0 }
-        st = CloudState(centerName: st.centerName); save(); publish()
+        if !st.outbox.isEmpty { try? await flushOutbox() }
+        parkOutbox()
+        replace(CloudState(centerName: st.centerName, cache: st.cache)); save(); publish()
         for t in ts { Task { await api.signOut(token: t) } }
     }
 
@@ -272,10 +346,16 @@ final class CloudRepository: AppRepository {
 
     private func dropOp(_ id: String) { st.outbox.removeAll { $0.id == id }; save(); publish() }
 
+    /// Send the queue in order. Offline / server down / session problem: stop and keep everything.
+    /// A write the server refuses on its rules or data is moved to refusedOps (kept, shown), so the queue never jams.
     private func flushOutbox() async throws {
         while let op = st.outbox.first {
             do { try await send(op) }
-            catch let e as APIError { if e.code >= 500 { throw e } } // refused by the rules or data: drop it so the queue never jams
+            catch let e as APIError {
+                if e.code >= 500 || e.code == 401 || e.code == 0 { throw e }
+                var r = op; r.refused = e.message
+                st.refusedOps = Array(((st.refusedOps ?? []) + [r]).suffix(200))
+            }
             dropOp(op.id)
         }
     }
@@ -284,7 +364,11 @@ final class CloudRepository: AppRepository {
     private func flushStrict(_ targetId: String) async throws {
         while let op = st.outbox.first {
             if op.id == targetId { try await send(op); dropOp(op.id); return }
-            do { try await send(op) } catch let e as APIError { if e.code >= 500 { throw e } }
+            do { try await send(op) } catch let e as APIError {
+                if e.code >= 500 || e.code == 401 || e.code == 0 { throw e }
+                var r = op; r.refused = e.message
+                st.refusedOps = Array(((st.refusedOps ?? []) + [r]).suffix(200))
+            }
             dropOp(op.id)
         }
     }
@@ -294,6 +378,7 @@ final class CloudRepository: AppRepository {
     /// Offline -> kept in the queue and sent automatically later.
     private func write<T>(_ op: PendingOp, _ value: T, _ local: (inout CenterSnapshot) -> Void) async throws -> T {
         local(&st.cache)
+        var op = op; op.kind = st.me?.role.dbValue; op.at = Date()
         st.outbox.append(op)
         save(); publish()
         do {
@@ -302,6 +387,10 @@ final class CloudRepository: AppRepository {
             return value
         } catch is OfflineError {
             return value
+        } catch let e as APIError where e.code >= 500 || e.code == 401 || e.code == 0 {
+            return value   // server busy / session to renew: kept in the queue, sent later
+        } catch is SessionEndedError {
+            return value   // the login ended: the write is parked until the password is typed again
         } catch {
             st.outbox.removeAll { $0.id == op.id }; save()
             try? await syncNow()
@@ -340,33 +429,149 @@ final class CloudRepository: AppRepository {
         _ = try await adminFunction(["action": "set_password", "target": t, "password": pw])
     }
 
-    // MARK: Teacher names (v3.1: names only; admin writes them with plain PostgREST)
-    func saveTeacherName(id: String?, name: String) async throws {
-        try require(Permissions.canManageCenter(try me()))
+    // MARK: Teachers (v3.3: each teacher is his own account; the admin makes it through the «access» function)
+    func saveTeacher(id: String?, name: String, circleId: String?, password: String?) async throws -> Member {
+        try require(Permissions.canManagePasswords(try me()))
         let n = name.trimmingCharacters(in: .whitespaces)
         if n.isEmpty { throw AppError.validation("اكتب اسم المعلم") }
-        let tid = id ?? newId()
-        let row = json(["id": tid, "center_id": try center(), "name": n, "active": true])
-        let old = st.cache.teacherNames.first { $0.id == tid }?.name
-        _ = try await write(PendingOp(type: "upsert", table: "teacher_names", body: row), ()) { d in
-            if let i = d.teacherNames.firstIndex(where: { $0.id == tid }) { d.teacherNames[i].name = n }
-            else { d.teacherNames.append(TeacherName(id: tid, name: n)) }
-        }
-        // A renamed teacher keeps their circles.
-        if let old = old, old != n {
-            for c in st.cache.circles where c.teacherName == old {
-                var c2 = c; c2.teacherName = n
-                _ = try? await saveCircle(c2)
+        let pw = password.map { Passwords.normalise($0) } ?? ""
+        if id == nil && pw.isEmpty { throw AppError.validation("اختر كلمة سر للمعلم") }
+        if !pw.isEmpty, let bad = Passwords.check(pw) { throw AppError.validation(bad) }
+        var body: JSON = ["action": "teacher_save", "name": n, "circle_id": opt(circleId)]
+        if let id = id { body["id"] = id }
+        if !pw.isEmpty { body["password"] = pw }
+        let o = try await adminFunction(body)
+        try? await syncNow()
+        if let p = o["profile"] as? JSON, let m = memberFrom(p) { return m }
+        return Member(id: id ?? "", fullName: n, role: .teacher)
+    }
+
+    func removeTeacher(_ id: String) async throws {
+        try require(Permissions.canManagePasswords(try me()))
+        _ = try await adminFunction(["action": "teacher_remove", "id": id])
+        try? await syncNow()
+    }
+
+    // MARK: v3.4 «عن المركز» (public read; admin writes). Tables centre_about / centre_about_buttons, bucket center-about.
+    static let aboutBucket = "center-about"
+    var aboutCenter: AboutInfo { st.about ?? .fallback }
+
+    private func readToken() async -> String { (try? await token()) ?? api.publicKey }
+
+    func refreshAbout() async {
+        let t = await readToken()
+        do {
+            let rows = try await api.selectAll(token: t, table: "centre_about", query: "select=*&limit=1")
+            let btnRows = (try? await api.selectAll(token: t, table: "centre_about_buttons", query: "select=*&order=sort")) ?? []
+            var a = AboutInfo.fallback
+            if let r = rows.first {
+                if let b = r["body"] as? String, !b.isEmpty { a.body = b }
+                a.fromServer = true
+                let cid = (r["center_id"] as? String) ?? st.centerId ?? ""
+                _ = cid
+                a.photos = (r["photos"] as? [Any])?.compactMap { $0 as? String } ?? []
+                a.updatedAt = r["updated_at"] == nil ? nil : Rows.ts(r["updated_at"])
             }
+            a.buttons = btnRows.compactMap { o in
+                guard let id = o["id"] as? String else { return nil }
+                return AboutButton(id: id, label: o["label"] as? String ?? "", kind: o["kind"] as? String ?? "link",
+                                   value: o["value"] as? String ?? "", sort: (o["sort"] as? NSNumber)?.intValue ?? 0)
+            }
+            st.about = a; save()
+        } catch {
+            // offline or not on the server yet: keep the cached copy (or the bundled one)
         }
     }
 
-    func removeTeacherName(_ id: String) async throws {
+    private var aboutDir: URL {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("center-about", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    func aboutPhoto(_ path: String) async -> UIImage? {
+        let f = aboutDir.appendingPathComponent(path.replacingOccurrences(of: "/", with: "_"))
+        if let d = try? Data(contentsOf: f), let i = UIImage(data: d) { return i }
+        guard let d = try? await api.publicDownload(bucket: Self.aboutBucket, path: path), let i = UIImage(data: d) else { return nil }
+        try? d.write(to: f, options: .atomic)
+        return i
+    }
+
+    private func adminWrite<T>(_ block: (String, String) async throws -> T) async throws -> T {
         try require(Permissions.canManageCenter(try me()))
-        let body = json(["active": false])
-        _ = try await write(PendingOp(type: "patch", table: "teacher_names", body: body, filter: "id=eq.\(id)"), ()) { d in
-            d.teacherNames = d.teacherNames.map { var t = $0; if t.id == id { t.active = false }; return t }
+        do { return try await block(try await token(), try center()) }
+        catch is OfflineError { throw AppError.network("هذه العملية تحتاج اتصالاً بالإنترنت") }
+    }
+
+    func saveAboutText(_ text: String) async throws {
+        try await adminWrite { t, c in
+            try await api.upsert(token: t, table: "centre_about", rows: [["center_id": c, "body": text, "updated_at": Rows.iso(Date())]], onConflict: "center_id", ignore: false)
         }
+        await refreshAbout()
+    }
+
+    func addAboutPhoto(_ jpeg: Data) async throws {
+        await refreshAbout()
+        let current = st.about ?? .fallback
+        try await adminWrite { t, c in
+            var list = current.fromServer ? current.photos : []
+            // the first photo the admin adds keeps his bundled photo as the first one (uploaded once), so it is not lost
+            if list.isEmpty, let b = AboutInfo.bundledPhoto, let bd = PhotoTools.jpeg(b, maxSide: 1280) {
+                let bp = "\(c)/\(UUID().uuidString.lowercased().prefix(8)).jpg"
+                try await api.storageUpload(token: t, bucket: Self.aboutBucket, path: bp, data: bd)
+                try? bd.write(to: aboutDir.appendingPathComponent(bp.replacingOccurrences(of: "/", with: "_")))
+                list.append(bp)
+            }
+            let p = "\(c)/\(UUID().uuidString.lowercased().prefix(8)).jpg"
+            try await api.storageUpload(token: t, bucket: Self.aboutBucket, path: p, data: jpeg)
+            try? jpeg.write(to: aboutDir.appendingPathComponent(p.replacingOccurrences(of: "/", with: "_")))
+            list.append(p)
+            try await api.upsert(token: t, table: "centre_about",
+                                 rows: [["center_id": c, "body": current.body, "photos": list, "updated_at": Rows.iso(Date())]],
+                                 onConflict: "center_id", ignore: false)
+        }
+        await refreshAbout()
+    }
+
+    func removeAboutPhoto(_ path: String) async throws {
+        try await adminWrite { t, c in
+            let list = (st.about?.photos ?? []).filter { $0 != path }
+            try await api.upsert(token: t, table: "centre_about",
+                                 rows: [["center_id": c, "body": aboutCenter.body, "photos": list, "updated_at": Rows.iso(Date())]],
+                                 onConflict: "center_id", ignore: false)
+            try? await api.storageDelete(token: t, bucket: Self.aboutBucket, path: path)
+        }
+        await refreshAbout()
+    }
+
+    func saveAboutButton(_ b: AboutButton) async throws {
+        try await adminWrite { t, c in
+            let id = b.id.isEmpty ? UUID().uuidString.lowercased() : b.id
+            try await api.upsert(token: t, table: "centre_about_buttons",
+                                 rows: [["id": id, "center_id": c, "label": b.label, "kind": b.kind, "value": b.value, "sort": b.sort]],
+                                 onConflict: "id", ignore: false)
+        }
+        await refreshAbout()
+    }
+
+    func deleteAboutButton(_ id: String) async throws {
+        try await adminWrite { t, _ in try await api.delete(token: t, table: "centre_about_buttons", filter: "id=eq.\(id)") }
+        await refreshAbout()
+    }
+
+    func moveAboutButton(_ id: String, up: Bool) async throws {
+        var list = aboutCenter.buttons.sorted { $0.sort < $1.sort }
+        guard let i = list.firstIndex(where: { $0.id == id }) else { return }
+        let j = up ? i - 1 : i + 1
+        guard list.indices.contains(j) else { return }
+        list.swapAt(i, j)
+        try await adminWrite { t, c in
+            for (k, b) in list.enumerated() {
+                try await api.patch(token: t, table: "centre_about_buttons", filter: "id=eq.\(b.id)", body: ["sort": k + 1])
+            }
+            _ = c
+        }
+        await refreshAbout()
     }
 
     // MARK: Student photos (v3.1: private bucket «student-photos», path <center>/<student>/<random8>.jpg)
@@ -466,6 +671,7 @@ final class CloudRepository: AppRepository {
         if saved.id.isEmpty { saved.id = newId() }
         saved.teacherId = u.id
         saved.circleId = student.circleId
+        if saved.byName.isEmpty, u.role == .teacher { saved.byName = u.fullName }
         let row = json(Rows.recitationRow(saved, try center()))
         return try await write(PendingOp(type: "upsert", table: "recitations", body: row, ignoreDuplicates: true), saved) { $0.recitations.insert(saved, at: 0) }
     }
@@ -478,13 +684,12 @@ final class CloudRepository: AppRepository {
         let u = try me()
         let d = st.cache
         guard let circle = d.circle(circleId) else { throw AppError.validation("الحلقة غير موجودة") }
-        try require(Permissions.canTakeAttendance(u))
-        _ = circle
+        try require(Permissions.canTakeAttendance(u, circle.id, d))
         let c = try center()
         let now = Rows.iso(Date())
         let rows: [JSON] = marks.map { sid, s in
             ["center_id": c, "student_id": sid, "circle_id": circleId, "day": day, "status": s.rawValue.lowercased(), "recorded_by": u.id, "recorded_at": now,
-             "by_name": opt(Recorder.name)]
+             "by_name": opt(u.role == .teacher ? u.fullName : nil)]
         }
         let local = marks.map { Attendance(id: newId(), studentId: $0.key, circleId: circleId, day: day, status: $0.value, recordedBy: u.id) }
         return try await write(PendingOp(type: "upsert", table: "attendance", body: json(rows), onConflict: "student_id,day"), marks.count) { snap in
@@ -502,7 +707,7 @@ final class CloudRepository: AppRepository {
         var saved = r
         if saved.id.isEmpty { saved.id = newId() }
         saved.awardedBy = u.id
-        if saved.byName.isEmpty { saved.byName = Recorder.name ?? "" }
+        if saved.byName.isEmpty, u.role == .teacher { saved.byName = u.fullName }
         let row = json(Rows.rewardRow(saved, try center()))
         return try await write(PendingOp(type: "upsert", table: "rewards", body: row, ignoreDuplicates: true), saved) { $0.rewards.insert(saved, at: 0) }
     }
@@ -515,7 +720,7 @@ final class CloudRepository: AppRepository {
         var saved = a
         if saved.id.isEmpty { saved.id = newId() }
         saved.createdBy = u.id
-        if saved.byName.isEmpty, u.role == .teacher { saved.byName = Recorder.name ?? "" }
+        if saved.byName.isEmpty, u.role == .teacher { saved.byName = u.fullName }
         let row = json(Rows.announcementRow(saved, try center()))
         return try await write(PendingOp(type: "upsert", table: "announcements", body: row, ignoreDuplicates: true), saved) { $0.announcements.insert(saved, at: 0) }
     }

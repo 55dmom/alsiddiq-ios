@@ -51,7 +51,9 @@ final class AppModel: ObservableObject {
             do {
                 let v = try await block()
                 pull()
-                if let ok = ok { say(ok) }
+                if let ok = ok {
+                    if case .pending = sync { say(ok + " • بانتظار الإرسال") } else { say(ok) }
+                }
                 then(v)
             } catch {
                 onError?()

@@ -563,3 +563,30 @@ struct AssistChip: View {
         }
     }
 }
+
+/// v3.2: the sync status line (writes waiting on the phone, waiting for a password, or refused).
+struct SyncLine: View {
+    @EnvironmentObject var model: AppModel
+    var onDark = true
+    var body: some View {
+        if let i = info {
+            HStack(spacing: 8) {
+                Image(systemName: i.1).font(.system(size: 13, weight: .semibold)).foregroundColor(i.2)
+                Text(i.0).font(T.labelMedium).foregroundColor(onDark ? .white : Brand.ink).lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Capsule().fill(onDark ? Color.white.opacity(0.12) : Brand.goldSoft))
+            .accessibilityIdentifier("syncLine")
+        }
+    }
+    private var info: (String, String, Color)? {
+        switch model.sync {
+        case .pending(let n): return ("بانتظار الإرسال: \(n) • تُرسل تلقائياً عند عودة الإنترنت", "icloud.and.arrow.up", Brand.gold)
+        case .waitingPassword(let n, let r):
+            return ("\(n) محفوظة على الجهاز • اكتب كلمة سر \(r == .admin ? "الإدارة" : "المعلمين") لإرسالها", "lock.icloud", Brand.gold)
+        case .error(let m): return (m, "exclamationmark.icloud", Brand.red)
+        default: return nil
+        }
+    }
+}

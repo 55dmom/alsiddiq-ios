@@ -75,5 +75,14 @@ EXTRA="-debugDate 2027-05-16" shot 28_occasion_eid_adha_home teacher home 8
 EXTRA="-debugDate 2026-09-26" shot 29_occasion_sep26_popup viewer home 9
 EXTRA="-debugDate 2026-09-26" shot 30_occasion_sep26_home viewer home 8
 EXTRA="-debugDate 2026-09-26 -openTool themes" shot 31_occasion_picker_locked viewer home 10
+# «عن المركز» (public; bundled text + photo as on a fresh centre), the admin's edit view, «تواصل مع المطوّر» (his package)
+tool 32_about about
+t 20 xcrun simctl terminate "$U" $BID 2>/dev/null || true
+t 60 xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -forceDemo YES -autoLogin admin -startRoute more -openTool about > /dev/null
+sleep 9; t 30 xcrun simctl io "$U" screenshot "shots/33_about_admin.png" > /dev/null 2>&1; echo "shot 33_about_admin"
+tool 34_developer developer
+# offline: what a teacher sees with 2 entries still on the phone (Debug flag -ciPending, simulated state)
+EXTRA="-ciPending 2" shot 35_offline_pending_home teacher home 8
+EXTRA="-ciPending 2" shot 36_offline_pending_history teacher history/s1 8
 xcrun simctl spawn "$U" log show --last 5m --predicate 'process == "AlSiddiq" AND messageType == fault' > shots/faults.txt 2>/dev/null || true
 ls -la shots

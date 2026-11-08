@@ -21,6 +21,7 @@ struct GateFrame<Content: View>: View {
                         .accessibilityLabel("رجوع")
                     }
                     Spacer()
+                    AboutButtonSmall()
                     ToolsButton()
                 }
                 .frame(height: 44)
@@ -36,6 +37,7 @@ struct GateFrame<Content: View>: View {
                     .font(T.headlineSmall).foregroundColor(.white).multilineTextAlignment(.center)
                 Rectangle().fill(Brand.gold).frame(width: 54, height: 3).cornerRadius(2).padding(.top, 10)
                 OccasionCard().padding(.top, 16)
+                SyncLine().padding(.top, 10)
                 Spacer().frame(height: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).font(T.titleLarge).foregroundColor(Brand.ink)
@@ -154,10 +156,10 @@ struct RoleLoginView: View {
 
     var body: some View {
         GateFrame(title: kind == .admin ? "دخول الإدارة" : "دخول المعلمين", onBack: onBack) {
-            Text(kind == .admin ? "اكتب كلمة سر الإدارة للتحكم في التطبيق" : "اكتب كلمة سر المعلمين لإدارة الحلقات والطلاب")
+            Text(kind == .admin ? "اكتب كلمة سر الإدارة للتحكم في التطبيق" : "اكتب كلمة سرك التي أعطتك إياها الإدارة لإدارة حلقتك")
                 .font(T.bodySmall).foregroundColor(Brand.muted).fixedSize(horizontal: false, vertical: true)
             Spacer().frame(height: 12)
-            PasswordInput(placeholder: kind == .admin ? "كلمة سر الإدارة" : "كلمة سر المعلمين", text: $pass, onSubmit: submit)
+            PasswordInput(placeholder: kind == .admin ? "كلمة سر الإدارة" : "كلمة سر المعلم", text: $pass, onSubmit: submit)
             if let error = error {
                 Text(error).font(T.bodySmall).foregroundColor(Brand.red).padding(.top, 8).accessibilityIdentifier("loginError")
             }

@@ -208,7 +208,12 @@ struct CenterSnapshot: Codable, Equatable {
     }
     func student(_ id: String?) -> Student? { students.first { $0.id == id } }
     func studentsIn(_ circleId: String?) -> [Student] { students.filter { $0.circleId == circleId && circleId != nil } }
-    func teachers() -> [TeacherName] { teacherNames.filter { $0.active }.sorted { $0.name < $1.name } }
+    /// v3.3: the teacher ACCOUNTS (each with his own password), as name entries for pickers.
+    func teachers() -> [TeacherName] {
+        members.filter { $0.role == .teacher && $0.active }.map { TeacherName(id: $0.id, name: $0.fullName) }.sorted { $0.name < $1.name }
+    }
+    /// v3.3: the circles this teacher account teaches.
+    func circles(of teacherId: String) -> [StudyCircle] { circles.filter { $0.teacherId == teacherId } }
     var unreadCount: Int { notifications.filter { !$0.read }.count }
 }
 
@@ -226,8 +231,6 @@ enum AppError: LocalizedError {
 /// v3.1: the teacher's own name picked on this phone (optional); records then carry it as by_name.
 enum Recorder {
     static let key = "recordedByName"
-    static var name: String? {
-        let n = UserDefaults.standard.string(forKey: key) ?? ""
-        return n.isEmpty ? nil : n
-    }
+    /// v3.3: records carry the signed-in teacher's own name (set by the repository); nothing to pick.
+    static var name: String? { nil }
 }

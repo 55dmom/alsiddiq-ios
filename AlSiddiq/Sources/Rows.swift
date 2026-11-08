@@ -99,6 +99,7 @@ struct RecordRow: View {
     let showStudent: Bool
     var onDelete: (() -> Void)? = nil
     @EnvironmentObject var dialogs: DialogHost
+    @EnvironmentObject var model: AppModel
     var body: some View {
         AppCard(padding: 12) {
             HStack(alignment: .center, spacing: 12) {
@@ -112,6 +113,7 @@ struct RecordRow: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
                     Pill(text: r.grade.label, color: gradeColor(r.grade))
+                    if model.repo.isPending(r.id) { Pill(text: "بانتظار الإرسال", color: Brand.gold) }
                     if showStudent { Pill(text: r.kind.short, color: kindColor(r.kind)) }
                     if let onDelete = onDelete {
                         Button {

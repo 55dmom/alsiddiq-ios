@@ -130,6 +130,7 @@ struct HomeHeader: View {
             Spacer().frame(height: 14)
             Text(subtitle).font(T.bodyMedium).foregroundColor(.white.opacity(0.85))
             OccasionCard().padding(.top, 12)
+            SyncLine().padding(.top, 10)
         }
         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 26)
         .background(

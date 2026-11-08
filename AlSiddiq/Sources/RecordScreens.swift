@@ -8,7 +8,7 @@ struct RecordStartScreen: View {
     @State private var circleIdx = 0
     var body: some View {
         let snap = model.snap
-        let circles = Permissions.visibleCircles(user, snap)
+        let circles = Permissions.editableCircles(user, snap)   // v3.3: a teacher records in his own circle only
         let circle = circles.indices.contains(circleIdx) ? circles[circleIdx] : nil
         let students = circle.map { c in snap.studentsIn(c.id).sorted { $0.fullName < $1.fullName } } ?? []
         let logged = Set(snap.recitations.filter { Days.dayOf($0.recordedAt) == Days.today }.map { $0.studentId })
@@ -49,8 +49,6 @@ struct RecordScreen: View {
     @State private var mistakes = 0
     @State private var notes = ""
     @State private var saving = false
-    /// v3.1: "who recorded" (optional), remembered on this phone.
-    @AppStorage(Recorder.key) private var byName = ""
 
     private func lastHifz(_ snap: CenterSnapshot) -> Recitation? {
         snap.recitations.filter { $0.studentId == studentId && $0.kind == .hifz }.max { $0.recordedAt < $1.recordedAt }
@@ -95,8 +93,7 @@ struct RecordScreen: View {
             guard let g = grade else { return }
             saving = true
             let r = Recitation(id: "", studentId: s.id, circleId: s.circleId, teacherId: user.id, kind: kind, fromSurah: fromSurah, fromAyah: fa,
-                               toSurah: toSurah, toAyah: ta, grade: g, mistakes: mistakes, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-                               byName: byName)
+                               toSurah: toSurah, toAyah: ta, grade: g, mistakes: mistakes, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
             model.run("حُفظ: \(kind.label) \(ayat) آية — \(g.label)", { try await model.repo.logRecitation(r) }, onError: { saving = false }) { _ in
                 saving = false
                 if goNext, let n = next { router.replaceTop(.record(n.id)) } else { router.back() }
@@ -190,13 +187,6 @@ struct RecordScreen: View {
                 }
                 Spacer().frame(height: 8)
                 Field(label: "ملاحظة (اختياري)", text: $notes, multiline: true, minLines: 2)
-            }
-            if !snap.teachers().isEmpty {
-                let names = snap.teachers().map { $0.name }
-                Text("المعلم المسجِّل (اختياري)").font(T.labelLarge).foregroundColor(Brand.muted)
-                ChoiceChips(options: ["بدون"] + names, selected: (names.firstIndex(of: byName).map { $0 + 1 }) ?? 0) { i in
-                    byName = i == 0 ? "" : names[i - 1]
-                }
             }
             PrimaryButton(title: grade == nil ? "اختر التقدير للحفظ" : "حفظ النتيجة", icon: "checkmark", enabled: valid && !saving, height: 54) { save(goNext: false) }
             if let n = next {

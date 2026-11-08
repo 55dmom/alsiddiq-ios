@@ -69,5 +69,5 @@ struct SetupView: View {
 
 extension SetupView {
     /// v3.1: whether first-run setup also asks for the shared teachers' password (as the server's setup takes it).
-    static let asksTeacherPassword = true
+    static let asksTeacherPassword = false   // v3.3: each teacher gets his own password from the admin
 }

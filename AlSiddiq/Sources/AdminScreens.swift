@@ -156,13 +156,15 @@ struct ViewerSettingsScreen: View {
             BigSectionButton(title: "الإدارة", sub: "كلمة سر الإدارة: التحكم الكامل في التطبيق", icon: "lock.shield.fill", color: Brand.navy, id: "btnAdmin") {
                 router.go(.roleLogin(.admin))
             }
-            BigSectionButton(title: "المعلمين", sub: "كلمة سر المعلمين: الحلقات والطلاب والتسميع والحضور", icon: "person.2.fill", color: Brand.maroon, id: "btnTeachers") {
+            BigSectionButton(title: "المعلمين", sub: "كلمة سر المعلم: حلقته وطلابها والتسميع والحضور", icon: "person.2.fill", color: Brand.maroon, id: "btnTeachers") {
                 router.go(.roleLogin(.teacher))
             }
             SectionHeader(title: "عام")
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
+            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "قناة تفاؤل في تيليجرام", icon: "paperplane") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {
                 dialogs.show(ConfirmDialog(title: "قفل التطبيق؟", message: "ستحتاج كلمة السر لفتحه مرة أخرى.", confirm: "قفل", destructive: true) {
@@ -184,8 +186,8 @@ struct MoreScreen: View {
         ScreenList(title: "الإدارة") {
             RoleStrip(user: user)
             SectionHeader(title: "الحسابات وكلمات السر")
-            MenuRow(title: "كلمات السر", sub: "العامة، الإدارة، المعلمين", icon: "key.fill", tint: Brand.gold) { router.go(.passwords) }
-            MenuRow(title: "المعلمون", sub: "\(snap.teachers().count) معلم • أسماء فقط للتسجيل والتقارير", icon: "person.crop.rectangle") { router.go(.teacherNames) }
+            MenuRow(title: "كلمات السر", sub: "العامة والإدارة", icon: "key.fill", tint: Brand.gold) { router.go(.passwords) }
+            MenuRow(title: "المعلمون", sub: "\(snap.teachers().count) معلم • لكل معلم كلمة سره وحلقته", icon: "person.crop.rectangle") { router.go(.teacherNames) }
             SectionHeader(title: "المركز")
             MenuRow(title: "الحلقات", sub: "\(snap.circles.count) حلقة", icon: "person.3") { router.go(.circles) }
             MenuRow(title: "الطلاب", sub: "\(snap.students.count) طالب", icon: "graduationcap") { router.go(.students) }
@@ -196,6 +198,8 @@ struct MoreScreen: View {
             MenuRow(title: "بيانات المركز", sub: snap.center.name, icon: "building.columns") { router.go(.centerSettings) }
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
+            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "قناة تفاؤل في تيليجرام", icon: "paperplane") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
         }
     }
@@ -208,22 +212,19 @@ struct TeacherMoreScreen: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var router: Router
     @EnvironmentObject var dialogs: DialogHost
-    @AppStorage(Recorder.key) private var myName = ""
     var body: some View {
         ScreenList(title: "المزيد") {
             RoleStrip(user: user)
-            MenuRow(title: "اسمي", sub: myName.isEmpty ? "اختر اسمك ليظهر على تسجيلاتك (اختياري)" : myName, icon: "person.text.rectangle", tint: Brand.gold) {
-                let names = [TeacherName(id: "", name: "بدون اسم")] + model.snap.teachers()
-                dialogs.show(PickerDialog(title: "اسمي", items: names, label: { $0.name }) { myName = $0.id.isEmpty ? "" : $0.name })
-            }
-            MenuRow(title: "تقرير اليوم", sub: "اختر الحلقة: كم حفظوا ومن غاب، ونشره أو مشاركته", icon: "doc.text", tint: Brand.maroon) { router.go(.circleReport("")) }
-            MenuRow(title: "طالب جديد", sub: "إضافة طالب لأي حلقة", icon: "person.badge.plus") { router.go(.studentEdit("new", nil)) }
-            MenuRow(title: "الطلاب", sub: "كل الطلاب • تعديل البيانات والصور", icon: "graduationcap") { router.go(.students) }
+            MenuRow(title: "تقرير اليوم", sub: "كم حفظوا ومن غاب، ونشره أو مشاركته", icon: "doc.text", tint: Brand.maroon) { router.go(.circleReport("")) }
+            MenuRow(title: "طالب جديد", sub: "إضافة طالب لحلقتك", icon: "person.badge.plus") { router.go(.studentEdit("new", nil)) }
+            MenuRow(title: "الطلاب", sub: "كل الطلاب • تعديل طلاب حلقتك وصورهم", icon: "graduationcap") { router.go(.students) }
             MenuRow(title: "المكافآت", sub: "منح النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "التقارير", sub: "إحصائيات الحفظ والحضور", icon: "chart.bar.xaxis") { router.go(.reports) }
             MenuRow(title: "الإعلانات", sub: "إعلانات المركز", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
+            MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "قناة تفاؤل في تيليجرام", icon: "paperplane") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
         }
     }
@@ -236,31 +237,36 @@ struct TeacherNamesScreen: View {
     @EnvironmentObject var dialogs: DialogHost
     var body: some View {
         let snap = model.snap
-        let list = snap.teachers()
-        ScreenList(title: "المعلمون", fab: Fab(label: "معلم جديد") { dialogs.show(TeacherNameDialog(id: nil, initial: "")) }) {
+        let list = snap.members.filter { $0.role == .teacher }.sorted { ($0.active ? 0 : 1, $0.fullName) < ($1.active ? 0 : 1, $1.fullName) }
+        ScreenList(title: "المعلمون", fab: Fab(label: "معلم جديد") { dialogs.show(TeacherDialog(teacher: nil)) }) {
             AppCard(padding: 12) {
-                Text("كل المعلمين يدخلون بكلمة سر واحدة (تغيّرها من «كلمات السر»). الأسماء هنا لاختيار «المعلم المسجِّل» وتظهر في التقارير وعلى الحلقات.")
+                Text("لكل معلم كلمة سر خاصة به وحلقته: يعدّل في حلقته فقط، ويرى بقية الحلقات للعرض. كلمات السر محفوظة مشفّرة ولا تُعرض لأحد.")
                     .font(T.bodySmall).foregroundColor(Brand.muted).fixedSize(horizontal: false, vertical: true)
             }
-            if list.isEmpty { EmptyState(title: "لا توجد أسماء بعد", message: "أضف أسماء المعلمين (اختياري)") }
+            if list.isEmpty { EmptyState(title: "لا يوجد معلمون بعد", message: "أضف المعلم واختر حلقته وكلمة سره") }
             ForEach(list) { t in
-                let circles = snap.circles.filter { snap.teacherName(of: $0) == t.name }.map { $0.name }
+                let circles = snap.circles(of: t.id).map { $0.name }
                 AppCard(padding: 12) {
                     HStack(spacing: 12) {
-                        Avatar(name: t.name, size: 42, color: Brand.maroon)
+                        Avatar(name: t.fullName, size: 42, color: t.active ? Brand.maroon : Brand.silver)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(t.name).font(T.titleSmall).foregroundColor(Brand.ink)
-                            Text(circles.isEmpty ? "بدون حلقة" : circles.joined(separator: "، ")).font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(1)
+                            Text(t.fullName).font(T.titleSmall).foregroundColor(Brand.ink)
+                            Text(!t.active ? "موقوف" : (circles.isEmpty ? "بدون حلقة" : circles.joined(separator: "، ")))
+                                .font(T.bodySmall).foregroundColor(t.active ? Brand.muted : Brand.red).lineLimit(1)
                         }
                         Spacer()
-                        Button { dialogs.show(TeacherNameDialog(id: t.id, initial: t.name)) } label: {
+                        Button { dialogs.show(TeacherDialog(teacher: t)) } label: {
                             Image(systemName: "pencil").foregroundColor(Brand.navy).frame(width: 36, height: 36)
                         }
-                        Button {
-                            dialogs.show(ConfirmDialog(title: "حذف \(t.name)؟", message: "يُحذف الاسم من القائمة، وتبقى سجلاته السابقة باسمه.", confirm: "حذف", destructive: true) {
-                                model.run("حُذف", { try await model.repo.removeTeacherName(t.id) })
-                            })
-                        } label: { Image(systemName: "trash").foregroundColor(Brand.red).frame(width: 36, height: 36) }
+                        .accessibilityLabel("تعديل")
+                        if t.active {
+                            Button {
+                                dialogs.show(ConfirmDialog(title: "إيقاف \(t.fullName)؟", message: "لن يستطيع الدخول بكلمة سره، وتبقى تسجيلاته السابقة باسمه. تقدر تعيد تفعيله بكلمة سر جديدة.", confirm: "إيقاف", destructive: true) {
+                                    model.run("أُوقف المعلم", { try await model.repo.removeTeacher(t.id) })
+                                })
+                            } label: { Image(systemName: "person.crop.circle.badge.xmark").foregroundColor(Brand.red).frame(width: 36, height: 36) }
+                            .accessibilityLabel("إيقاف")
+                        }
                     }
                 }
             }
@@ -268,23 +274,58 @@ struct TeacherNamesScreen: View {
     }
 }
 
-struct TeacherNameDialog: View {
-    let id: String?
-    let initial: String
+/// v3.3: add / edit a teacher: name, his circle, his own password (required when new; empty = unchanged).
+struct TeacherDialog: View {
+    let teacher: Member?
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var dialogs: DialogHost
     @State private var name = ""
+    @State private var circleId: String? = nil
+    @State private var p1 = ""
+    @State private var p2 = ""
+    @State private var loaded = false
+    private var isNew: Bool { teacher == nil || teacher?.active == false }
     var body: some View {
-        DialogCard(title: id == nil ? "معلم جديد" : "تعديل الاسم") {
-            Field(label: "اسم المعلم", text: $name)
+        let snap = model.snap
+        let circleName = circleId.flatMap { snap.circle($0)?.name } ?? "بدون حلقة"
+        let pw = Passwords.normalise(p1)
+        let pwOk = pw.isEmpty ? !isNew : (pw.count >= Passwords.minLength && pw == Passwords.normalise(p2))
+        DialogCard(title: teacher == nil ? "معلم جديد" : "تعديل المعلم") {
+            VStack(alignment: .leading, spacing: 10) {
+                Field(label: "اسم المعلم", text: $name)
+                Menu {
+                    Button("بدون حلقة") { circleId = nil }
+                    ForEach(snap.circles.sorted { $0.name < $1.name }) { c in
+                        let other = c.teacherId.flatMap { tid in tid == teacher?.id ? nil : snap.teacherName(tid) }
+                        Button(c.name + (other.map { " • مع \($0)" } ?? "")) { circleId = c.id }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "person.3").foregroundColor(Brand.navy)
+                        Text("الحلقة: " + circleName).font(T.bodyMedium).foregroundColor(Brand.ink)
+                        Spacer()
+                        Image(systemName: "chevron.down").foregroundColor(Brand.muted)
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Brand.line, lineWidth: 1.2))
+                }
+                .accessibilityIdentifier("teacherCircle")
+                Field(label: isNew ? "كلمة سره (6 أحرف أو أرقام على الأقل)" : "كلمة سر جديدة (اتركها فارغة لعدم التغيير)", text: $p1, secure: true)
+                if !pw.isEmpty { Field(label: "تأكيدها", text: $p2, secure: true) }
+                if !p2.isEmpty && pw != Passwords.normalise(p2) { Text("غير متطابقتين").font(T.bodySmall).foregroundColor(Brand.red) }
+            }
         } buttons: {
             DialogButton(title: "إلغاء") { dialogs.dismiss() }
-            DialogButton(title: "حفظ", filled: true, enabled: !name.trimmingCharacters(in: .whitespaces).isEmpty) {
-                let n = name
-                model.run("تم الحفظ", { try await model.repo.saveTeacherName(id: id, name: n) }) { _ in dialogs.dismiss() }
+            DialogButton(title: "حفظ", filled: true, enabled: !name.trimmingCharacters(in: .whitespaces).isEmpty && pwOk) {
+                let n = name, c = circleId, p = pw.isEmpty ? nil : p1, id = teacher?.id
+                model.run("تم الحفظ", { try await model.repo.saveTeacher(id: id, name: n, circleId: c, password: p) }) { _ in dialogs.dismiss() }
             }
         }
-        .onAppear { if name.isEmpty { name = initial } }
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            if let t = teacher { name = t.fullName; circleId = snap.circles(of: t.id).first?.id }
+        }
     }
 }
 
@@ -292,6 +333,7 @@ struct TeacherNameDialog: View {
 struct PasswordsScreen: View {
     let user: Member
     @EnvironmentObject var dialogs: DialogHost
+    @EnvironmentObject var router: Router
     var body: some View {
         ScreenList(title: "كلمات السر") {
             AppCard(padding: 12) {
@@ -301,8 +343,8 @@ struct PasswordsScreen: View {
             MenuRow(title: "كلمة السر العامة", sub: "تفتح التطبيق للعرض فقط", icon: "eye", tint: Brand.gold) {
                 dialogs.show(SetPasswordDialog(target: .viewer, title: "كلمة السر العامة الجديدة"))
             }
-            MenuRow(title: "كلمة سر المعلمين", sub: "واحدة لكل المعلمين، تفتح كل الحلقات", icon: "person.2", tint: Brand.maroon) {
-                dialogs.show(SetPasswordDialog(target: .teacher, title: "كلمة سر المعلمين الجديدة"))
+            MenuRow(title: "كلمات سر المعلمين", sub: "لكل معلم كلمة سره، من «المعلمون»", icon: "person.2", tint: Brand.maroon) {
+                router.go(.teacherNames)
             }
             MenuRow(title: "كلمة سر الإدارة", sub: "التحكم الكامل", icon: "lock.shield", tint: Brand.navy) {
                 dialogs.show(SetPasswordDialog(target: .admin, title: "كلمة سر الإدارة الجديدة"))
@@ -361,7 +403,7 @@ struct CircleReportScreen: View {
                     Text(text).font(T.bodyMedium).foregroundColor(Brand.ink).fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                PrimaryButton(title: "نشر في التطبيق", icon: "paperplane.fill", enabled: Permissions.canPostAnnouncement(user)) {
+                PrimaryButton(title: "نشر في التطبيق", icon: "paperplane.fill", enabled: Permissions.canPostAnnouncement(user) && Permissions.teaches(user, circle?.id, snap)) {
                     guard let c = circle else { return }
                     let a = Announcement(id: "", title: "تقرير \(c.name) — \(Days.iso(Days.today))", body: CircleReport.body(snap, c, Days.today),
                                          audience: .all, createdBy: user.id)
@@ -474,7 +516,8 @@ struct AboutScreen: View {
     private var syncLabel: String {
         switch model.sync {
         case .synced: return "مفعّلة • متزامن"
-        case .pending(let n): return "بانتظار رفع \(n)"
+        case .pending(let n): return "بانتظار الإرسال: \(n)"
+        case .waitingPassword(let n, let r): return "\(n) بانتظار كلمة سر \(r == .admin ? "الإدارة" : "المعلمين")"
         case .error(let m): return "خطأ: \(m)"
         case .localOnly: return "على الجهاز"
         }

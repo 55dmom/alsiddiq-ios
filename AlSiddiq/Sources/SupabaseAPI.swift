@@ -24,6 +24,8 @@ func opt<T>(_ v: T?) -> Any { if let v = v { return v } else { return NSNull() }
 /// Minimal client for Supabase Auth, PostgREST and Edge Functions over HTTPS — the same calls the
 /// Android app makes. Only the PUBLIC (anon) key is used; the server's rules decide what each account may do.
 final class SupabaseAPI {
+    /// Unit tests only: a mock server (URLProtocol) in front of every request.
+    static var extraProtocols: [AnyClass] = []
     let baseURL: String
     let publicKey: String
     private let http: URLSession
@@ -34,6 +36,7 @@ final class SupabaseAPI {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 30
         c.waitsForConnectivity = false
+        if !Self.extraProtocols.isEmpty { c.protocolClasses = Self.extraProtocols + (c.protocolClasses ?? []) }
         http = URLSession(configuration: c)
     }
 
@@ -142,6 +145,23 @@ final class SupabaseAPI {
         return d
     }
 
+    /// Public bucket read (no login needed).
+    func publicDownload(bucket: String, path: String) async throws -> Data {
+        guard let url = URL(string: "\(baseURL)/storage/v1/object/public/\(bucket)/\(path)") else { throw APIError(code: 0, message: "عنوان غير صحيح") }
+        let (d, resp): (Data, URLResponse)
+        do { (d, resp) = try await http.data(for: URLRequest(url: url)) } catch { throw OfflineError() }
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200...299).contains(code) else { throw APIError(code: code, message: "تعذّر تحميل الصورة") }
+        return d
+    }
+
+    /// List a bucket folder (names only).
+    func storageList(token: String, bucket: String, prefix: String) async throws -> [String] {
+        let data = try await ok("POST", "/storage/v1/object/list/\(bucket)", token: token, body: ["prefix": prefix, "limit": 100, "sortBy": ["column": "name", "order": "asc"]])
+        let arr = (try? JSONSerialization.jsonObject(with: data)) as? [JSON] ?? []
+        return arr.compactMap { $0["name"] as? String }.filter { !$0.hasPrefix(".") }
+    }
+
     func storageDelete(token: String, bucket: String, path: String) async throws {
         try await ok("DELETE", "/storage/v1/object/\(bucket)/\(path)", token: token)
     }
@@ -230,7 +250,8 @@ enum Rows {
 
     /// v3 accounts only (access_kind set); old build-5 phone accounts are ignored.
     static func member(_ o: JSON) -> Member? {
-        guard let id = s(o, "id"), let kind = s(o, "access_kind"), let role = Role(db: kind) else { return nil }
+        // v3.3: the retired v3.1 shared «teachers» account (if one exists) is not a person: left out.
+        guard let id = s(o, "id"), let kind = s(o, "access_kind"), kind.lowercased() != "teachers", let role = Role(db: kind) else { return nil }
         return Member(id: id, fullName: s(o, "full_name") ?? "", role: role, active: b(o, "active") ?? true,
                       createdAt: ts(o["created_at"]))
     }

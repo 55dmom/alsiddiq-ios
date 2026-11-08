@@ -9,7 +9,21 @@ final class DemoRepository: AppRepository {
     let mode: BackendMode = .demo
     private(set) var currentUser: Member?
     private(set) var snapshot = CenterSnapshot()
-    let syncState: SyncState = .localOnly
+    /// CI screenshots only (Debug): "-ciPending N" shows the «بانتظار الإرسال» state as it looks offline. Never in Release.
+    var syncState: SyncState {
+        #if DEBUG
+        let n = UserDefaults.standard.integer(forKey: "ciPending")
+        if n > 0 { return .pending(n) }
+        #endif
+        return .localOnly
+    }
+    func isPending(_ id: String) -> Bool {
+        #if DEBUG
+        let n = UserDefaults.standard.integer(forKey: "ciPending")
+        if n > 0 { return store.data.recitations.sorted { $0.recordedAt > $1.recordedAt }.prefix(n).contains { $0.id == id } }
+        #endif
+        return false
+    }
     var onChange: (() -> Void)?
 
     private var store: DemoStore
@@ -128,21 +142,80 @@ final class DemoRepository: AppRepository {
         persist()
     }
 
-    func saveTeacherName(id: String?, name: String) async throws {
+    /// v3.3: the admin adds / edits a teacher ACCOUNT: name, his circle and his own password.
+    func saveTeacher(id: String?, name: String, circleId: String?, password: String?) async throws -> Member {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        if n.isEmpty { throw AppError.validation("اكتب اسم المعلم") }
+        let pw = password.map { Passwords.normalise($0) } ?? ""
+        if id == nil && pw.isEmpty { throw AppError.validation("اختر كلمة سر للمعلم") }
+        if !pw.isEmpty, let bad = Passwords.check(pw) { throw AppError.validation(bad) }
+        var saved: Member!
         try mutate { d, u in
-            try require(Permissions.canManageCenter(u))
-            let n = name.trimmingCharacters(in: .whitespaces)
-            if n.isEmpty { throw AppError.validation("اكتب اسم المعلم") }
-            if let id = id, let i = d.teacherNames.firstIndex(where: { $0.id == id }) { d.teacherNames[i].name = n }
-            else { d.teacherNames.append(TeacherName(id: newId(), name: n)) }
+            try require(Permissions.canManagePasswords(u))
+            if !pw.isEmpty, store.passwordHashes.contains(where: { $0.key != id && $0.value == sha256(pw) }) {
+                throw AppError.validation("كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها")
+            }
+            let tid = id ?? "m-" + newId()
+            if let i = d.members.firstIndex(where: { $0.id == tid }) { d.members[i].fullName = n; d.members[i].active = true; saved = d.members[i] }
+            else { let m = Member(id: tid, fullName: n, role: .teacher); d.members.append(m); saved = m }
+            if !pw.isEmpty { store.passwordHashes[tid] = sha256(pw) }
+            for k in d.circles.indices where d.circles[k].teacherId == tid && d.circles[k].id != circleId { d.circles[k].teacherId = nil; d.circles[k].teacherName = nil }
+            if let c = circleId, let k = d.circles.firstIndex(where: { $0.id == c }) { d.circles[k].teacherId = tid; d.circles[k].teacherName = n }
         }
+        return saved
     }
 
-    func removeTeacherName(_ id: String) async throws {
+    // MARK: v3.4 about (demo: on the phone only)
+    private var aboutStore: AboutInfo {
+        get { (UserDefaults.standard.data(forKey: "demo_about")).flatMap { try? JSONDecoder().decode(AboutInfo.self, from: $0) } ?? .fallback }
+        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: "demo_about") }
+    }
+    var aboutCenter: AboutInfo { aboutStore }
+    func refreshAbout() async {}
+    func aboutPhoto(_ path: String) async -> UIImage? { store.photos["about/" + path].flatMap { UIImage(data: $0) } }
+    func saveAboutText(_ text: String) async throws {
+        try require(Permissions.canManageCenter(try requireUser()))
+        var a = aboutStore; a.body = text; a.fromServer = true; aboutStore = a
+    }
+    func addAboutPhoto(_ jpeg: Data) async throws {
+        try require(Permissions.canManageCenter(try requireUser()))
+        let p = newId() + ".jpg"
+        store.photos["about/" + p] = jpeg; persist()
+        var a = aboutStore; a.photos.append(p); a.fromServer = true; aboutStore = a
+    }
+    func removeAboutPhoto(_ path: String) async throws {
+        try require(Permissions.canManageCenter(try requireUser()))
+        store.photos["about/" + path] = nil; persist()
+        var a = aboutStore; a.photos.removeAll { $0 == path }; aboutStore = a
+    }
+    func saveAboutButton(_ b: AboutButton) async throws {
+        try require(Permissions.canManageCenter(try requireUser()))
+        var a = aboutStore; var nb = b; if nb.id.isEmpty { nb.id = newId() }
+        if let i = a.buttons.firstIndex(where: { $0.id == nb.id }) { a.buttons[i] = nb } else { a.buttons.append(nb) }
+        aboutStore = a
+    }
+    func deleteAboutButton(_ id: String) async throws {
+        try require(Permissions.canManageCenter(try requireUser()))
+        var a = aboutStore; a.buttons.removeAll { $0.id == id }; aboutStore = a
+    }
+    func moveAboutButton(_ id: String, up: Bool) async throws {
+        var a = aboutStore
+        var list = a.buttons.sorted { $0.sort < $1.sort }
+        guard let i = list.firstIndex(where: { $0.id == id }) else { return }
+        let j = up ? i - 1 : i + 1
+        guard list.indices.contains(j) else { return }
+        list.swapAt(i, j)
+        for k in list.indices { list[k].sort = k + 1 }
+        a.buttons = list; aboutStore = a
+    }
+
+    /// v3.3: disable a teacher (his past entries keep his name; he can no longer sign in).
+    func removeTeacher(_ id: String) async throws {
         try mutate { d, u in
-            try require(Permissions.canManageCenter(u))
-            d.teacherNames = d.teacherNames.map { var t = $0; if t.id == id { t.active = false }; return t }
-            _ = id
+            try require(Permissions.canManagePasswords(u))
+            if let i = d.members.firstIndex(where: { $0.id == id }) { d.members[i].active = false }
+            for k in d.circles.indices where d.circles[k].teacherId == id { d.circles[k].teacherId = nil; d.circles[k].teacherName = nil }
+            store.passwordHashes[id] = nil
         }
     }
 
@@ -230,7 +303,7 @@ final class DemoRepository: AppRepository {
     func saveAttendance(circleId: String, day: String, marks: [String: AttendanceStatus]) async throws -> Int {
         try mutate { d, u in
             guard let circle = d.circle(circleId) else { throw AppError.validation("الحلقة غير موجودة") }
-            try require(Permissions.canTakeAttendance(u))
+            try require(Permissions.canTakeAttendance(u, circle.id, d))
             d.attendance.removeAll { $0.day == day && marks.keys.contains($0.studentId) }
             let added = marks.map { Attendance(id: newId(), studentId: $0.key, circleId: circleId, day: day, status: $0.value, recordedBy: u.id) }
             d.attendance += added

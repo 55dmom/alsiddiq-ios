@@ -90,13 +90,16 @@ struct TeacherHome: View {
     let user: Member
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var router: Router
-    /// v3.1: the shared teachers' password opens every circle; the picked circle is remembered on this phone.
+    /// v3.3: his own circle(s) first and editable; the other circles open for viewing only.
     @AppStorage("teacherCircleId") private var circleId = ""
 
     var body: some View {
         let snap = model.snap
-        let circles = Permissions.visibleCircles(user, snap)
+        let mine = Permissions.editableCircles(user, snap)
+        let others = Permissions.visibleCircles(user, snap).filter { c in !mine.contains { $0.id == c.id } }
+        let circles = mine + others
         let circle = circles.first { $0.id == circleId } ?? circles.first
+        let canEdit = Permissions.teaches(user, circle?.id, snap)
         let students = circle.map { c in snap.studentsIn(c.id).sorted { $0.fullName < $1.fullName } } ?? []
         let stats = Stats.forCenter(snap, students)
         let today = Days.today
@@ -116,8 +119,22 @@ struct TeacherHome: View {
                     if circles.isEmpty {
                         EmptyState(title: "لا توجد حلقات", message: "تنشئها الإدارة من الإعدادات ← الإدارة")
                     } else {
-                        ChoiceChips(options: circles.map { $0.name }, selected: circles.firstIndex { $0.id == circle?.id } ?? 0) { circleId = circles[$0].id }
+                        ChoiceChips(options: circles.map { c in mine.contains { $0.id == c.id } ? c.name : "👁 " + c.name },
+                                    selected: circles.firstIndex { $0.id == circle?.id } ?? 0) { circleId = circles[$0].id }
                             .accessibilityIdentifier("circlePicker")
+                        if mine.isEmpty {
+                            Text("لم تُسند لك حلقة بعد، تسندها الإدارة من «المعلمون». تقدر تتصفح الحلقات للعرض.")
+                                .font(T.bodySmall).foregroundColor(Brand.muted).padding(.top, 6)
+                        }
+                    }
+                    if circle != nil && !canEdit {
+                        HStack(spacing: 8) {
+                            Image(systemName: "eye").foregroundColor(Brand.goldInk)
+                            Text("هذه الحلقة ليست حلقتك: للعرض فقط").font(T.labelLarge).foregroundColor(Brand.goldInk)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Capsule().fill(Brand.goldSoft)).padding(.top, 8)
+                        .accessibilityIdentifier("viewOnlyCircle")
                     }
                     if let c = circle {
                         AppCard {
@@ -129,12 +146,12 @@ struct TeacherHome: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("تسميع اليوم • \(c.name)").font(T.titleSmall).foregroundColor(Brand.ink)
                                     Text(pending == 0 ? "أحسنت! سُجّل جميع الطلاب" : "بقي \(pending) طالب لم يُسجَّل لهم").font(T.bodySmall).foregroundColor(Brand.muted)
-                                    Button { router.go(.circle(c.id)) } label: {
+                                    if canEdit { Button { router.go(.circle(c.id)) } label: {
                                         HStack(spacing: 4) { Image(systemName: "plus"); Text("تسجيل الآن").font(T.labelLarge) }
                                             .foregroundColor(.white).padding(.horizontal, 16).frame(height: 40)
                                             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Brand.navy))
                                     }
-                                    .buttonStyle(PressableStyle()).padding(.top, 6)
+                                    .buttonStyle(PressableStyle()).padding(.top, 6) }
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -147,8 +164,10 @@ struct TeacherHome: View {
                         SectionHeader(title: "أدوات")
                         HStack(spacing: 10) {
                             QuickAction(label: "تقرير اليوم", icon: "doc.text") { router.go(.circleReport(c.id)) }
-                            QuickAction(label: "الحضور", icon: "checklist") { router.go(.attendance(c.id)) }
-                            QuickAction(label: "طالب جديد", icon: "person.badge.plus") { router.go(.studentEdit("new", c.id)) }
+                            if canEdit {
+                                QuickAction(label: "الحضور", icon: "checklist") { router.go(.attendance(c.id)) }
+                                QuickAction(label: "طالب جديد", icon: "person.badge.plus") { router.go(.studentEdit("new", c.id)) }
+                            }
                         }
                         SectionHeader(title: "آخر التسجيلات في الحلقة")
                         if recent.isEmpty { EmptyState(title: "لا تسجيلات بعد", message: "اضغط «تسجيل الآن» واختر الطالب") }
