@@ -5,6 +5,10 @@ options:
     iOS: "16.0"
   developmentLanguage: ar
 packages:
+  Mushaf:
+    path: Packages/Mushaf
+  PrayerTimes:
+    path: Packages/PrayerTimes
   Adhkar:
     path: Packages/Adhkar
   Duas:
@@ -20,6 +24,8 @@ targets:
     sources:
       - path: AlSiddiq
     dependencies:
+      - package: Mushaf
+      - package: PrayerTimes
       - package: Adhkar
       - package: Duas
       - package: Tasbeeh
@@ -42,6 +48,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSCameraUsageDescription: "لالتقاط صورة الطالب وإضافتها إلى ملفه"
         NSPhotoLibraryUsageDescription: "لاختيار صورة الطالب من الصور"
+        NSLocationWhenInUseUsageDescription: "نستخدم موقعك لحساب أوقات الصلاة"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes: [fetch]

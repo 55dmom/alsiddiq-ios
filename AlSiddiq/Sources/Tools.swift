@@ -1,4 +1,6 @@
 import SwiftUI
+import Mushaf
+import PrayerTimes
 import Adhkar
 import Duas
 import Tasbeeh
@@ -6,13 +8,15 @@ import AsmaAllah
 
 /// «الأدوات»: side tools anyone can open, no password. More items (المصحف، الأذكار…) are added here later.
 enum ToolItem: String, CaseIterable, Identifiable, Hashable {
-    case adhkar, duas, tasbeeh, asma
+    case mushaf, prayer, adhkar, duas, tasbeeh, asma
     var id: String { rawValue }
     var title: String {
-        switch self { case .adhkar: return "الأذكار"; case .duas: return "الأدعية"; case .tasbeeh: return "المسبحة"; case .asma: return "أسماء الله الحسنى" }
+        switch self { case .mushaf: return "المصحف"; case .prayer: return "مواقيت الصلاة"; case .adhkar: return "الأذكار"; case .duas: return "الأدعية"; case .tasbeeh: return "المسبحة"; case .asma: return "أسماء الله الحسنى" }
     }
     var sub: String {
         switch self {
+        case .mushaf: return "المصحف كاملاً برسم المصحف العثماني"
+        case .prayer: return "أوقات الصلاة والإقامة والتاريخ الهجري"
         case .adhkar: return "أذكار الصباح والمساء وغيرها"
         case .duas: return "أدعية من القرآن والسنة"
         case .tasbeeh: return "عداد التسبيح مع الأذكار"
@@ -20,10 +24,12 @@ enum ToolItem: String, CaseIterable, Identifiable, Hashable {
         }
     }
     var icon: String {
-        switch self { case .adhkar: return "sun.and.horizon"; case .duas: return "hands.sparkles"; case .tasbeeh: return "hand.tap"; case .asma: return "sparkles" }
+        switch self { case .mushaf: return "book.closed"; case .prayer: return "clock"; case .adhkar: return "sun.and.horizon"; case .duas: return "hands.sparkles"; case .tasbeeh: return "hand.tap"; case .asma: return "sparkles" }
     }
     @ViewBuilder var screen: some View {
         switch self {
+        case .mushaf: MushafView()
+        case .prayer: PrayerTimesView()
         case .adhkar: AdhkarView()
         case .duas: DuasView()
         case .tasbeeh: TasbeehView()

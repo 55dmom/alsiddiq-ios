@@ -160,7 +160,7 @@ struct ViewerSettingsScreen: View {
                 router.go(.roleLogin(.teacher))
             }
             SectionHeader(title: "عام")
-            MenuRow(title: "الأدوات", sub: "الأذكار، الأدعية، المسبحة، أسماء الله الحسنى", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
+            MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {

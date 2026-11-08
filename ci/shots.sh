@@ -52,6 +52,8 @@ tool() { # name tool
   sleep 9; t 30 xcrun simctl io "$U" screenshot "shots/$1.png" > /dev/null 2>&1; echo "shot $1"
 }
 tool 18_tools_menu menu
+tool 18a_tool_mushaf mushaf
+tool 18b_tool_prayer prayer
 tool 19a_tool_adhkar adhkar
 tool 19b_tool_duas duas
 tool 19c_tool_tasbeeh tasbeeh
