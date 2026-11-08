@@ -22,8 +22,9 @@ shot() { # name who route wait
 splash() {
   # a normal launch (no autoLogin) shows the full splash animation
   t 20 xcrun simctl terminate "$U" $BID 2>/dev/null || true
-  t 60 xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -forceDemo YES > /dev/null
-  sleep 1.2; t 30 xcrun simctl io "$U" screenshot "shots/00c_splash_anim.png" > /dev/null 2>&1
+  t 60 xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -forceDemo YES -holdSplash 8 > /dev/null
+  sleep 0.4; t 30 xcrun simctl io "$U" screenshot "shots/00a_splash_start.png" > /dev/null 2>&1
+  sleep 2.5; t 30 xcrun simctl io "$U" screenshot "shots/00b_splash.png" > /dev/null 2>&1
   echo "shot splash"
 }
 splash

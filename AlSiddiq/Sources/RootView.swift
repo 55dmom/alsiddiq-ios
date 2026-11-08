@@ -49,7 +49,8 @@ struct RootView: View {
                 Task { await SelfTest.run(model, tries: tries) }
             }
             #endif
-            try? await Task.sleep(nanoseconds: autoLogin == nil ? 1_800_000_000 : 300_000_000)
+            let hold = UserDefaults.standard.double(forKey: "holdSplash") // CI screenshots of the splash
+            try? await Task.sleep(nanoseconds: hold > 0 ? UInt64(hold * 1e9) : (autoLogin == nil ? 1_800_000_000 : 300_000_000))
             withAnimation { splash = false }
         }
     }

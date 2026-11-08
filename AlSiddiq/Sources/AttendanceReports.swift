@@ -91,7 +91,7 @@ private struct AttendanceTaking: View {
                     for s in students { if let v = marks[s.id] { m[s.id] = v } }
                     model.run(nil, { try await model.repo.saveAttendance(circleId: c.id, day: dayIso, marks: m) }) { n in model.say("حُفظ حضور \(n) طالب") }
                 }
-                Text("يصل إشعار لولي الأمر عند تسجيل الغياب.").font(T.labelSmall).foregroundColor(Brand.muted)
+                Text("الغائبون يظهرون في «تقرير اليوم» للحلقة.").font(T.labelSmall).foregroundColor(Brand.muted)
             }
         }
         .onAppear { sync(key, saved) }
