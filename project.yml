@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.alsiddiq
   deploymentTarget:
     iOS: "16.0"
+  developmentLanguage: ar
 packages:
   Adhkar:
     path: Packages/Adhkar
@@ -12,7 +13,6 @@ packages:
     path: Packages/Tasbeeh
   AsmaAllah:
     path: Packages/AsmaAllah
-  developmentLanguage: ar
 targets:
   AlSiddiq:
     type: application
