@@ -5,11 +5,15 @@ import SwiftUI
 struct GateFrame<Content: View>: View {
     var title: String
     var onBack: (() -> Void)? = nil
+    /// The opening screen only: the prayer times and the tools under the password card (no password needed).
+    var showTools = false
     @ViewBuilder var content: () -> Content
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var tools: ToolsHost
     @State private var glow = false
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: 0) {
                 HStack {
@@ -53,9 +57,16 @@ struct GateFrame<Content: View>: View {
                     Text("كلمات السر التجريبية: العامة \(DemoSeed.viewerPassword) • الإدارة \(DemoSeed.adminPassword) • المعلمين \(DemoSeed.teacherPassword)")
                         .font(T.labelSmall).foregroundColor(Brand.muted).multilineTextAlignment(.center).padding(.top, 8)
                 }
+                if showTools {
+                    Spacer().frame(height: 18)
+                    ToolsHome(open: { tools.show($0) }, showExtras: false)
+                        .padding(.horizontal, -22)   // the tools block keeps its own margins
+                }
                 Spacer().frame(height: 32)
             }
             .padding(.horizontal, 22)
+        }
+        .onAppear { if showTools { ciScrollToTools(proxy) } }
         }
         .background(
             LinearGradient(stops: [.init(color: Brand.navy, location: 0), .init(color: Brand.navyDark, location: 0.36), .init(color: Brand.bg, location: 0.66)],
@@ -119,7 +130,7 @@ struct LoginView: View {
             if needsSetup == true {
                 SetupView { needsSetup = false }
             } else {
-                GateFrame(title: "أدخل كلمة السر") {
+                GateFrame(title: "أدخل كلمة السر", showTools: true) {
                     PasswordInput(placeholder: "كلمة السر", text: $pass, onSubmit: submit)
                     if let error = error {
                         Text(error).font(T.bodySmall).foregroundColor(Brand.red).padding(.top, 8).accessibilityIdentifier("loginError")

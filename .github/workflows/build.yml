@@ -103,10 +103,10 @@ jobs:
       - name: Shoot
         timeout-minutes: 25
         run: bash ci/shots.sh "${{ steps.sim.outputs.udid }}"
-      - name: Shoot (iPhone SE width)
+      - name: Shoot (iPhone SE and 6.7-inch)
         if: always()
-        timeout-minutes: 15
-        run: bash ci/shots_se.sh "${{ steps.sim.outputs.udid }}"
+        timeout-minutes: 22
+        run: bash ci/shots_sizes.sh "${{ steps.sim.outputs.udid }}"
       - name: Unit tests (offline sync against a mock server)
         if: always()
         timeout-minutes: 15
@@ -197,13 +197,10 @@ jobs:
                       im = Image.open(f"{d}/{f}").convert("RGB"); im.thumbnail((420, 920)); im.save("/tmp/s.jpg", quality=80)
                       z.write("/tmp/s.jpg", f[:-4] + ".jpg")
           print("sheet:", len(have), "screens")
-          # the «الأدوات» tab change: its own small sheet (iPhone SE screens are scaled to the same width)
-          order2 = ["40_admin_home_bar","41_teacher_home_bar","42_viewer_home_bar","43_tools_tab_admin","46_tools_tab_tool_open",
-                    "44_tools_tab_teacher","45_tools_tab_viewer","47_tools_tab_night","00_password",
-                    "50_se_admin_home","51_se_teacher_home","52_se_viewer_home","53_se_tools_tab"]
-          have2 = [n for n in order2 if os.path.exists(f"{d}/{n}.png")]
-          if have2:
-              w2, cols2 = 300, 5
+          # the 8 Nov changes: their own small sheets (iPhone SE / 6.7-inch screens scaled to the same width)
+          def small_sheet(order, name, w2=300, cols2=5):
+              have2 = [n for n in order if os.path.exists(f"{d}/{n}.png")]
+              if not have2: return
               ims2 = [Image.open(f"{d}/{n}.png").convert("RGB") for n in have2]
               hs = [int(im.height * w2 / im.width) for im in ims2]
               rows = [list(range(i, min(i + cols2, len(ims2)))) for i in range(0, len(ims2), cols2)]
@@ -215,10 +212,17 @@ jobs:
                   for j, k in enumerate(r):
                       x = j * (w2 + 8)
                       sheet2.paste(ims2[k].resize((w2, hs[k])), (x, y + 24))
-                      dr2.text((x + 6, y + 6), have2[k] + ("  (iPhone SE)" if "_se_" in have2[k] else ""), fill="black")
+                      tag = "  (iPhone SE)" if "_se_" in have2[k] else ("  (6.7in)" if "_67_" in have2[k] else "")
+                      dr2.text((x + 6, y + 6), have2[k] + tag, fill="black")
                   y += hrow
-              sheet2.save(f"{d}/ios_tabs_fix.jpg", quality=84)
-              print("tabs sheet:", len(have2), "screens")
+              sheet2.save(f"{d}/{name}", quality=84)
+              print(name, len(have2), "screens")
+          small_sheet(["40_admin_home_bar","41_teacher_home_bar","42_viewer_home_bar","43_tools_tab_admin","46_tools_tab_tool_open",
+                       "44_tools_tab_teacher","45_tools_tab_viewer","47_tools_tab_night","49_tools_tab_grid","00_password","48_password_tools_below","74_67_tools_tab",
+                       "50_se_admin_home","51_se_teacher_home","52_se_viewer_home","53_se_tools_tab","55_se_tools_tab_grid","56_se_password_tools"], "ios_tabs_fix.jpg")
+          small_sheet(["60_se_mushaf_p1","61_se_mushaf_p3","62_se_mushaf_p552","80_mushaf_p1","81_mushaf_p3","82_mushaf_p552",
+                       "70_67_mushaf_p1","71_67_mushaf_p3","72_67_mushaf_p552","73_67_mushaf_p3_bigger",
+                       "85_hifz_recite_start","86_hifz_recite_progress","63_se_hifz_recite"], "ios_mushaf_hifz.jpg", cols2=5)
           PY
           ls -la art/screenshots | tail -5
       - name: Publish release

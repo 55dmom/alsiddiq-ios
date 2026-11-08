@@ -214,7 +214,11 @@ enum PrFmt {
 /// «مواقيت الصلاة» — the button's single entry view.
 public struct PrayerTimesView: View {
     @StateObject private var m = PrModel()
-    public init() {}
+    /// Added by the host app «مركز الصديق»: true when the view sits inside a page that scrolls itself
+    /// (the «الأدوات» tab), so it draws without its own scroll view. Texts and logic untouched.
+    private let embedded: Bool
+    public init() { embedded = false }
+    public init(embedded: Bool) { self.embedded = embedded }
 
     public var body: some View {
         TimelineView(.periodic(from: Date(), by: 1)) { ctx in
@@ -225,8 +229,10 @@ public struct PrayerTimesView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { m.showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
-                    .accessibilityLabel(Text(verbatim: "الإعدادات"))
+                if !embedded {
+                    Button { m.showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
+                        .accessibilityLabel(Text(verbatim: "الإعدادات"))
+                }
             }
         }
         .sheet(isPresented: $m.showPlaces) { NavigationStack { places }.prRTL() }
@@ -239,8 +245,7 @@ public struct PrayerTimesView: View {
     private func content(_ now: Date) -> some View {
         let a = m.around(now)
         let today = m.slots(for: now)
-        return ScrollView {
-            VStack(spacing: 16) {
+        let page = VStack(spacing: 16) {
                 hero(now, a.prev, a.next)
                 placeBar
                 if !m.message.isEmpty {
@@ -255,6 +260,8 @@ public struct PrayerTimesView: View {
                 infoLine
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
+        return Group {
+            if embedded { page } else { ScrollView { page } }
         }
     }
 
@@ -326,6 +333,15 @@ public struct PrayerTimesView: View {
                 .background(Capsule().fill(PrTheme.gradient))
             }
             .buttonStyle(PrPress())
+            if embedded { // no navigation bar where it is embedded: the settings button sits here instead
+                Button { m.showSettings = true } label: {
+                    Image(systemName: "slider.horizontal.3").font(.subheadline.weight(.semibold)).foregroundColor(PrTheme.accent)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(PrTheme.soft))
+                }
+                .buttonStyle(PrPress())
+                .accessibilityLabel(Text(verbatim: "الإعدادات"))
+            }
         }
     }
 

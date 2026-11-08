@@ -96,5 +96,15 @@ shot 44_tools_tab_teacher teacher tools 8
 shot 45_tools_tab_viewer viewer tools 8
 EXTRA="-openTabTool adhkar" shot 46_tools_tab_tool_open admin tools 10
 EXTRA="-appTheme night" shot 47_tools_tab_night admin tools 8
+# the opening screen and the tools tab, scrolled down to the tools grid (Debug flag -ciScrollTools)
+EXTRA="-ciScrollTools YES" shot 48_password_tools_below none home 11
+EXTRA="-ciScrollTools YES" shot 49_tools_tab_grid admin tools 10
+# المصحف: each page fits the screen at the default size (6.3-inch here; SE and 6.7-inch in shots_sizes.sh)
+EXTRA="-openTool mushaf -ciMushafPage 1" shot 80_mushaf_p1 viewer home 12
+EXTRA="-openTool mushaf -ciMushafPage 3" shot 81_mushaf_p3 viewer home 12
+EXTRA="-openTool mushaf -ciMushafPage 552" shot 82_mushaf_p552 viewer home 12
+# وضع الحفظ ▸ «تسميع»: the start (all hidden) and a simulated state (5 words recited, the 6th missed; Debug flag)
+EXTRA="-openTool hifz -ciHifzMode recite" shot 85_hifz_recite_start viewer home 11
+EXTRA="-openTool hifz -ciHifzMode recite -ciReciteDemo 5" shot 86_hifz_recite_progress viewer home 11
 xcrun simctl spawn "$U" log show --last 5m --predicate 'process == "AlSiddiq" AND messageType == fault' > shots/faults.txt 2>/dev/null || true
 ls -la shots

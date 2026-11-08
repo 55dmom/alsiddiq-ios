@@ -58,6 +58,8 @@ targets:
         NSCameraUsageDescription: "لالتقاط صورة الطالب وإضافتها إلى ملفه"
         NSPhotoLibraryUsageDescription: "لاختيار صورة الطالب من الصور"
         NSLocationWhenInUseUsageDescription: "نستخدم موقعك لحساب أوقات الصلاة"
+        NSMicrophoneUsageDescription: "نستخدم المايك في «تسميع» داخل وضع الحفظ: تقرأ من حفظك وتظهر الكلمات اللي قرأتها صح"
+        NSSpeechRecognitionUsageDescription: "نحوّل قراءتك إلى نص في «تسميع» عشان نطابقها مع الآيات، على جهازك إذا كان مدعوماً"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes: [fetch]

@@ -8,10 +8,10 @@ enum HfTab: Int, CaseIterable, Identifiable {
     }
 }
 enum HfMode: Int, CaseIterable, Identifiable {
-    case read, hide, words
+    case read, hide, words, recite
     var id: Int { rawValue }
     var title: String {
-        switch self { case .read: return "قراءة"; case .hide: return "إخفاء الآيات"; case .words: return "اختبار الكلمات" }
+        switch self { case .read: return "قراءة"; case .hide: return "إخفاء الآيات"; case .words: return "اختبار الكلمات"; case .recite: return "تسميع" }
     }
 }
 
@@ -104,6 +104,7 @@ final class HfModel: ObservableObject {
 /// «وضع الحفظ» — the button's single entry view (the whole Mushaf).
 public struct HifzView: View {
     @StateObject private var m = HfModel()
+    @StateObject private var rec = HfReciter()
     public init() {}
 
     public var body: some View {
@@ -136,6 +137,21 @@ public struct HifzView: View {
             }
         }
         .sheet(isPresented: $m.showPicker) { NavigationStack { picker }.hfRTL() }
+        .task(id: String(m.surah) + ":" + String(m.from) + ":" + String(m.to) + ":" + String(m.mode.rawValue)) {
+            if m.mode == .recite {
+                rec.load(surah: m.surah, ayahs: m.range) { a in HfModel.words(HfQuran.shared.split(m.surah, a).rest) }
+                #if DEBUG
+                let n = UserDefaults.standard.integer(forKey: "ciReciteDemo") // CI screenshots only
+                if n > 0 { rec.demo(n) }
+                #endif
+            } else {
+                rec.stop()
+            }
+        }
+        .onDisappear { rec.stop() }
+        #if DEBUG
+        .onAppear { if UserDefaults.standard.string(forKey: "ciHifzMode") == "recite" { m.mode = .recite } }
+        #endif
         .tint(HfTheme.accent)
         .hfRTL()
     }
@@ -185,6 +201,7 @@ public struct HifzView: View {
                 }
                 .padding(.vertical, 2)
             }
+            if m.mode == .recite { HfRecitePanel(r: rec) }
             ForEach(m.range, id: \.self) { a in ayahCard(a) }
             if m.to < m.count {
                 Button { m.from = m.to + 1; m.to = min(m.count, m.to + 5); m.resetView() } label: {
@@ -233,6 +250,8 @@ public struct HifzView: View {
                         }
                     case .words:
                         wordText(words, shown, a)
+                    case .recite:
+                        reciteText(words, a)
                     }
                 }
                 .lineSpacing(m.fontSize * 0.55)
@@ -300,6 +319,24 @@ public struct HifzView: View {
             }
         }
         if shown >= words.count { t = t + Text(verbatim: " " + HfQuran.marker(a)).font(HfFont.quran(m.fontSize)) }
+        return t
+    }
+
+    /// «تسميع»: the words he has recited so far appear in place; the rest stay hidden; a missed word is underlined.
+    private func reciteText(_ words: [String], _ a: Int) -> Text {
+        let shown = rec.revealed(ayah: a)
+        let wrong = rec.wrongIndex(ayah: a)
+        var t = Text(verbatim: "")
+        for (i, w) in words.enumerated() {
+            let sep = i == 0 ? "" : " "
+            if shown.contains(i) {
+                t = t + Text(verbatim: sep + w).font(HfFont.quran(m.fontSize))
+            } else {
+                let c = i == wrong ? HfTheme.warn : HfTheme.accent.opacity(0.55)
+                t = t + Text(verbatim: sep).font(HfFont.quran(m.fontSize)) + Text(verbatim: w).font(HfFont.quran(m.fontSize)).foregroundColor(.clear).underline(true, color: c)
+            }
+        }
+        if !words.isEmpty && shown.count >= words.filter({ !HfMatch.norm($0).isEmpty }).count { t = t + Text(verbatim: " " + HfQuran.marker(a)).font(HfFont.quran(m.fontSize)) }
         return t
     }
 

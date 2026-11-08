@@ -171,17 +171,90 @@ struct ToolsMenuList: View {
     }
 }
 
-/// The «الأدوات» tab in the bottom bar: the same menu (no password), each tool opens full screen with a back button.
+/// The shared tools block (the «الأدوات» tab and the opening screen): the prayer times shown directly
+/// (his package's own view), then a grid of the other 7 tools. No password.
+/// `open` nil: each tile pushes on the surrounding NavigationStack; otherwise the tile calls it.
+struct ToolsHome: View {
+    var open: ((ToolItem) -> Void)? = nil
+    var showExtras = true
+    private let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PrayerTimesView(embedded: true)
+            VStack(alignment: .leading, spacing: 12) {
+                SectionLabel(text: "الأدوات").id("toolsGrid")
+                LazyVGrid(columns: cols, spacing: 10) {
+                    ForEach(ToolItem.tools.filter { $0 != .prayer }) { item in ToolTile(item: item, open: open) }
+                }
+                if showExtras {
+                    SectionLabel(text: "المظهر").padding(.top, 6)
+                    ToolRow(item: .themes)
+                    SectionLabel(text: "المركز").padding(.top, 6)
+                    ToolRow(item: .about)
+                    ToolRow(item: .developer)
+                }
+            }
+            .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 24)
+        }
+    }
+}
+
+/// The «الأدوات» tab in the bottom bar: ToolsHome in its own stack; each tool opens full screen with a back button
+/// (the bottom bar hides while it is open).
 struct ToolsTabScreen: View {
     @EnvironmentObject var tools: ToolsHost
     var body: some View {
         NavigationStack(path: $tools.tabPath) {
-            ToolsMenuList()
+            ScrollViewReader { proxy in
+                ScrollView { ToolsHome() }
+                    .onAppear { ciScrollToTools(proxy) }
+            }
+                .background(Brand.bg.ignoresSafeArea())
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: ToolItem.self) { $0.screen }
         }
         .tint(Brand.navy)
         .accessibilityIdentifier("toolsTab")
+    }
+}
+
+/// CI screenshots only (Debug): "-ciScrollTools YES" scrolls a tools page down to the grid.
+func ciScrollToTools(_ proxy: ScrollViewProxy) {
+    #if DEBUG
+    guard UserDefaults.standard.bool(forKey: "ciScrollTools") else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { proxy.scrollTo("toolsGrid", anchor: .top) } }
+    #endif
+}
+
+/// One tool in the grid: its icon and name.
+private struct ToolTile: View {
+    let item: ToolItem
+    var open: ((ToolItem) -> Void)? = nil
+    var body: some View {
+        Group {
+            if let open = open {
+                Button { open(item) } label: { tile }
+            } else {
+                NavigationLink(value: item) { tile }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("tile_" + item.rawValue)
+    }
+    private var tile: some View {
+        VStack(spacing: 8) {
+            Image(systemName: item.icon).font(.system(size: 22, weight: .semibold)).foregroundColor(.white)
+                .frame(width: 52, height: 52)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(colors: [Brand.navy, Brand.maroon], startPoint: .topLeading, endPoint: .bottomTrailing)))
+            Text(item.title).font(T.labelLarge).foregroundColor(Brand.ink)
+                .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 34, alignment: .top)
+        }
+        .padding(.vertical, 12).padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Brand.card))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Brand.gold.opacity(0.35), lineWidth: 1))
     }
 }
 

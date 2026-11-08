@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct MsOpen: Identifiable { let id: Int }
 
@@ -18,14 +21,15 @@ final class MsModel: ObservableObject {
     @Published var page: Int = 1 { didSet { if open != nil { lastPage = page } } }
     @Published var lastPage: Int { didSet { d.set(lastPage, forKey: k + "last") } }
     @Published var bookmark: Int { didSet { d.set(bookmark, forKey: k + "bookmark") } }
-    @Published var fontSize: Double { didSet { d.set(fontSize, forKey: k + "font") } }
+    /// The reader's text size as a multiple of the size that fits the whole page on the screen (1 = fit, no scrolling).
+    @Published var scale: Double { didSet { d.set(scale, forKey: k + "scale") } }
     @Published var toast = ""
 
     init() {
         lastPage = d.integer(forKey: k + "last")
         bookmark = d.integer(forKey: k + "bookmark")
-        let f = d.double(forKey: k + "font")
-        fontSize = f > 0 ? f : 24
+        let sc = d.double(forKey: k + "scale")
+        scale = sc > 0 ? sc : 1
     }
 
     func read(_ p: Int) {
@@ -84,6 +88,12 @@ public struct MushafView: View {
         .navigationTitle(Text(verbatim: "المصحف"))
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(item: $m.open) { _ in MsReader(m: m) }
+        #if DEBUG
+        .onAppear { // CI screenshots only: "-ciMushafPage N" opens that page
+            let p = UserDefaults.standard.integer(forKey: "ciMushafPage")
+            if p > 0, m.open == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { m.read(p) } }
+        }
+        #endif
         .tint(MsTheme.accent)
         .msRTL()
     }
@@ -188,16 +198,24 @@ public struct MushafView: View {
 struct MsReader: View {
     @ObservedObject var m: MsModel
     @Environment(\.dismiss) private var dismiss
+    @GestureState private var pinch: CGFloat = 1
+    static let minScale = 0.6
+    static let maxScale = 2.2
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 TabView(selection: $m.page) {
                     ForEach(1...MsQuran.pageCount, id: \.self) { p in
-                        MsPageView(page: p, fontSize: m.fontSize).tag(p)
+                        MsPageView(page: p, scale: min(Self.maxScale, max(Self.minScale, m.scale * Double(pinch)))).tag(p)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .updating($pinch) { v, s, _ in s = v }
+                        .onEnded { v in m.scale = min(Self.maxScale, max(Self.minScale, m.scale * Double(v))) }
+                )
                 bottomBar
                 if !m.toast.isEmpty {
                     Text(verbatim: m.toast).font(.subheadline.weight(.semibold)).foregroundColor(.white)
@@ -217,8 +235,8 @@ struct MsReader: View {
                         .accessibilityLabel(Text(verbatim: "إغلاق"))
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Button { m.fontSize = max(18, m.fontSize - 2) } label: { Image(systemName: "textformat.size.smaller") }
-                    Button { m.fontSize = min(44, m.fontSize + 2) } label: { Image(systemName: "textformat.size.larger") }
+                    Button { m.scale = max(Self.minScale, ((m.scale - 0.1) * 1000).rounded() / 1000) } label: { Image(systemName: "textformat.size.smaller") }
+                    Button { m.scale = min(Self.maxScale, ((m.scale + 0.1) * 1000).rounded() / 1000) } label: { Image(systemName: "textformat.size.larger") }
                     Button { withAnimation { m.toggleBookmark() } } label: { Image(systemName: m.bookmark == m.page ? "bookmark.fill" : "bookmark") }
                         .accessibilityLabel(Text(verbatim: "علامة"))
                 }
@@ -243,7 +261,8 @@ struct MsReader: View {
 
 struct MsPageView: View {
     let page: Int
-    let fontSize: Double
+    /// 1 = the size that fits the whole page; above 1 the page scrolls.
+    let scale: Double
 
     private struct Seg: Identifiable {
         let id: Int
@@ -271,38 +290,127 @@ struct MsPageView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                HStack {
-                    Text(verbatim: "سورة " + MsQuran.suras[MsQuran.pages[page - 1].0 - 1].name)
-                    Spacer()
-                    Text(verbatim: String(page))
-                }
-                .font(.caption.weight(.semibold)).foregroundColor(MsTheme.gold)
-                ForEach(segs) { g in
-                    if g.header {
-                        VStack(spacing: 10) {
-                            Text(verbatim: "سورة " + MsQuran.suras[g.surah - 1].name)
-                                .font(.headline).foregroundColor(MsTheme.accent)
-                                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(MsTheme.soft))
-                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MsTheme.gold.opacity(0.6), lineWidth: 1))
-                            if let b = g.basmala {
-                                Text(verbatim: b).font(MsFont.quran(fontSize)).foregroundColor(.primary)
-                            }
-                        }
-                    } else {
-                        Text(verbatim: g.text)
-                            .font(MsFont.quran(fontSize))
-                            .lineSpacing(fontSize * 0.55)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                Spacer(minLength: 90)
+        GeometryReader { geo in
+            let w = max(120, geo.size.width - 36)
+            let h = max(120, geo.size.height - MsFit.chrome)
+            let fit = MsFit.size(page: page, width: w, height: h, parts: fitParts)
+            let size = CGFloat(fit.size) * CGFloat(scale)
+            if scale > 1.0001 || !fit.fits {
+                ScrollView { content(size) }
+            } else {
+                content(size).frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             }
-            .padding(.horizontal, 18).padding(.top, 10)
         }
+    }
+
+    /// What has to fit: the surah title boxes, the basmalas and the running text, in page order.
+    private var fitParts: [MsFit.Part] {
+        var out: [MsFit.Part] = []
+        for g in segs {
+            if g.header {
+                out.append(.header)
+                if let b = g.basmala { out.append(.basmala(b)) }
+            } else {
+                out.append(.text(g.text))
+            }
+        }
+        return out
+    }
+
+    private func content(_ fontSize: CGFloat) -> some View {
+        VStack(spacing: 14) {
+            HStack {
+                Text(verbatim: "سورة " + MsQuran.suras[MsQuran.pages[page - 1].0 - 1].name)
+                Spacer()
+                Text(verbatim: String(page))
+            }
+            .font(.caption.weight(.semibold)).foregroundColor(MsTheme.gold)
+            ForEach(segs) { g in
+                if g.header {
+                    VStack(spacing: 10) {
+                        Text(verbatim: "سورة " + MsQuran.suras[g.surah - 1].name)
+                            .font(.headline).foregroundColor(MsTheme.accent)
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(MsTheme.soft))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(MsTheme.gold.opacity(0.6), lineWidth: 1))
+                        if let b = g.basmala {
+                            Text(verbatim: b).font(MsFont.quran(fontSize)).foregroundColor(.primary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                } else {
+                    Text(verbatim: g.text)
+                        .font(MsFont.quran(fontSize))
+                        .lineSpacing(fontSize * 0.55)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            Spacer(minLength: MsFit.bottomBar)
+        }
+        .padding(.horizontal, 18).padding(.top, 10)
+    }
+}
+
+/// The text size at which a whole page fits the space above the bottom bar (measured with the same font and spacing).
+enum MsFit {
+    enum Part { case header, basmala(String), text(String) }
+    /// Room kept for the page-number line, the top padding and the floating slider bar.
+    static let bottomBar: CGFloat = 78
+    static let chrome: CGFloat = 10 + 18 + 14 + bottomBar
+    static let minSize: CGFloat = 14
+    static let maxSize: CGFloat = 40
+    private static var cache: [String: (size: Double, fits: Bool)] = [:]
+
+    static func size(page: Int, width: CGFloat, height avail: CGFloat, parts: [Part]) -> (size: Double, fits: Bool) {
+        let key = "\(page)-\(Int(width))-\(Int(avail))"
+        if let c = cache[key] { return c }
+        var lo = minSize, hi = maxSize
+        let fits = Self.height(of: parts, size: lo, width: width) <= avail
+        if fits {
+            if Self.height(of: parts, size: hi, width: width) <= avail { lo = hi }
+            else {
+                for _ in 0..<14 {
+                    let mid = (lo + hi) / 2
+                    if Self.height(of: parts, size: mid, width: width) <= avail { lo = mid } else { hi = mid }
+                }
+            }
+        }
+        let r = (size: Double((lo * 4).rounded(.down) / 4), fits: fits)
+        cache[key] = r
+        return r
+    }
+
+    static func height(of parts: [Part], size: CGFloat, width: CGFloat) -> CGFloat {
+        var total: CGFloat = 0
+        for (i, p) in parts.enumerated() {
+            if i > 0 {
+                if case .basmala = p { total += 10 } else { total += 14 }
+            }
+            switch p {
+            case .header: total += 22 + 20
+            case .basmala(let b): total += measure(b, size: size, width: width, spacing: 0)
+            case .text(let t): total += measure(t, size: size, width: width, spacing: size * 0.55)
+            }
+        }
+        return total * 1.04 + 4
+    }
+
+    static func measure(_ s: String, size: CGFloat, width: CGFloat, spacing: CGFloat) -> CGFloat {
+        #if canImport(UIKit)
+        MsFont.register()
+        let font = UIFont(name: MsFont.quranName, size: size) ?? UIFont(name: "AmiriQuran-Regular", size: size) ?? UIFont.systemFont(ofSize: size)
+        let ps = NSMutableParagraphStyle()
+        ps.lineSpacing = spacing
+        ps.alignment = .center
+        ps.baseWritingDirection = .rightToLeft
+        let a = NSAttributedString(string: s, attributes: [.font: font, .paragraphStyle: ps])
+        let r = a.boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+        return ceil(r.height)
+        #else
+        return size * 1.6 * CGFloat(max(1, s.count / 40))
+        #endif
     }
 }
