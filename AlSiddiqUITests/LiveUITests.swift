@@ -50,7 +50,7 @@ final class LiveUITests: XCTestCase {
         shot("21_cloud_password_screen")
 
         // 2) a wrong password -> the server's Arabic answer
-        type(app, "wrong-pass-x1")
+        type(app, "9999999999")
         let err = app.staticTexts["loginError"]
         sleep(2)
         note("wrong password error shown: \(err.waitForExistence(timeout: 25)) text=\(err.exists ? err.label : "-")")

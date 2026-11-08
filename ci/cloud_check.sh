@@ -6,8 +6,9 @@ U="$1"   # simulator udid
 BID=com.alsiddiq.app
 t() { local s=$1; shift; perl -e 'alarm shift; exec @ARGV' "$s" "$@"; }
 SU="$SUPABASE_URL"; K="$SUPABASE_ANON_KEY"
-rnd() { python3 -c 'import secrets;print(secrets.token_hex(6))'; }
-AP=A$(rnd); VP=V$(rnd); TP=T$(rnd); TP2=N$(rnd)
+# digits only: the simulator's Arabic keyboard has the digits, not the Latin letters (XCUITest types key by key)
+rnd() { python3 -c 'import secrets;print(secrets.randbelow(9*10**10)+10**10)'; }
+AP=1$(rnd); VP=2$(rnd); TP=3$(rnd); TP2=4$(rnd)
 for p in "$AP" "$VP" "$TP" "$TP2"; do echo "::add-mask::$p"; done
 mkdir -p shots
 LOG=shots/cloud_selftest.txt
@@ -40,7 +41,12 @@ launch -autoLogin none; sleep 14; shot 20_cloud_setup
 echo "== setup" | tee -a $LOG
 SJ=$(fn "{\"action\":\"setup\",\"center_name\":\"$CNAME\",\"admin_password\":\"$AP\",\"viewer_password\":\"$VP\",\"teachers_password\":\"$TP\"}")
 AT=$(echo "$SJ" | jget 'd["session"]["access_token"]'); echo "::add-mask::$AT"
-echo "setup role: $(echo "$SJ" | jget 'd["profile"]["access_kind"]')" | tee -a $LOG
+ROLE=$(echo "$SJ" | jget 'd["profile"]["access_kind"]' 2>/dev/null)
+echo "setup role: $ROLE" | tee -a $LOG
+if [ "$ROLE" != "admin" ]; then
+  echo "setup refused, stopping (someone else may be testing): $(echo "$SJ" | jget 'd.get("error")' 2>/dev/null)" | tee -a $LOG
+  exit 0
+fi
 CID=$(get "centers?select=id" "$AT" | jget 'd[0]["id"]')
 C1=$(uid); C2=$(uid); S1=$(uid); S2=$(uid)
 rest circles "$AT" "[{\"id\":\"$C1\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة أ\"},{\"id\":\"$C2\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة ب\"}]" | tee -a $LOG
