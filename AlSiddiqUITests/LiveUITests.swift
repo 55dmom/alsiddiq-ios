@@ -18,17 +18,21 @@ final class LiveUITests: XCTestCase {
         }
     }
     private func text(_ app: XCUIApplication, _ contains: String) -> XCUIElement {
-        app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", contains)).firstMatch
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", contains)).firstMatch
     }
     private func button(_ app: XCUIApplication, _ contains: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", contains)).firstMatch
+        _ = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", contains)).firstMatch.waitForExistence(timeout: 8)
+        let b = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", contains)).firstMatch
+        return b.exists ? b : text(app, contains)
     }
     private func type(_ app: XCUIApplication, _ value: String) {
         let f = app.secureTextFields["passwordField"]
         _ = f.waitForExistence(timeout: 20)
         f.tap()
-        f.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30))
+        sleep(1)
+        if !f.hasFocus { f.tap(); sleep(1) }
         f.typeText(value)
+        note("typed \(value.count) chars, field shows \((f.value as? String)?.count ?? -1)")
         let b = app.buttons["loginButton"]
         if b.exists { b.tap() } else { f.typeText("\n") }
     }
@@ -48,6 +52,7 @@ final class LiveUITests: XCTestCase {
         // 2) a wrong password -> the server's Arabic answer
         type(app, "wrong-pass-x1")
         let err = app.staticTexts["loginError"]
+        sleep(2)
         note("wrong password error shown: \(err.waitForExistence(timeout: 25)) text=\(err.exists ? err.label : "-")")
         shot("22_cloud_wrong_password")
 
@@ -55,6 +60,7 @@ final class LiveUITests: XCTestCase {
         type(app, vp)
         let banner = text(app, "وضع العرض")
         note("general password -> viewer home: \(banner.waitForExistence(timeout: 40))")
+        if !banner.exists { note("TREE:\n" + app.debugDescription.prefix(6000)) }
         shot("23_cloud_viewer_home")
 
         // 4) Settings -> two big buttons

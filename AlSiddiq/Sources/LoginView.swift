@@ -21,6 +21,7 @@ struct GateFrame<Content: View>: View {
                         .accessibilityLabel("رجوع")
                     }
                     Spacer()
+                    ToolsButton()
                 }
                 .frame(height: 44)
                 ZStack {
@@ -105,7 +106,7 @@ struct LoginView: View {
         busy = true; error = nil
         Task {
             do { _ = try await model.repo.signIn(password: pass, kind: nil); model.pull(); pass = "" }
-            catch { self.error = (error as? LocalizedError)?.errorDescription ?? "تعذّر الدخول" }
+            catch { self.error = (error as? LocalizedError)?.errorDescription ?? "تعذّر الدخول"; pass = "" }
             busy = false
         }
     }
@@ -145,7 +146,7 @@ struct RoleLoginView: View {
         busy = true; error = nil
         Task {
             do { _ = try await model.repo.signIn(password: pass, kind: kind); model.pull() }
-            catch { self.error = (error as? LocalizedError)?.errorDescription ?? "تعذّر الدخول" }
+            catch { self.error = (error as? LocalizedError)?.errorDescription ?? "تعذّر الدخول"; pass = "" }
             busy = false
         }
     }

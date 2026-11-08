@@ -2,7 +2,16 @@ name: AlSiddiq
 options:
   bundleIdPrefix: com.alsiddiq
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "16.0"
+packages:
+  Adhkar:
+    path: Packages/Adhkar
+  Duas:
+    path: Packages/Duas
+  Tasbeeh:
+    path: Packages/Tasbeeh
+  AsmaAllah:
+    path: Packages/AsmaAllah
   developmentLanguage: ar
 targets:
   AlSiddiq:
@@ -10,6 +19,11 @@ targets:
     platform: iOS
     sources:
       - path: AlSiddiq
+    dependencies:
+      - package: Adhkar
+      - package: Duas
+      - package: Tasbeeh
+      - package: AsmaAllah
     info:
       path: AlSiddiq/Info.plist
       properties:

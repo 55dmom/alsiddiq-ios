@@ -147,6 +147,7 @@ private struct BigSectionButton: View {
 /// The general view's Settings: two big buttons, each with its own password screen.
 struct ViewerSettingsScreen: View {
     let user: Member
+    @EnvironmentObject var tools: ToolsHost
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var router: Router
     @EnvironmentObject var dialogs: DialogHost
@@ -159,6 +160,7 @@ struct ViewerSettingsScreen: View {
                 router.go(.roleLogin(.teacher))
             }
             SectionHeader(title: "عام")
+            MenuRow(title: "الأدوات", sub: "الأذكار، الأدعية، المسبحة، أسماء الله الحسنى", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {

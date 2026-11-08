@@ -41,7 +41,6 @@ echo "== setup" | tee -a $LOG
 SJ=$(fn "{\"action\":\"setup\",\"center_name\":\"$CNAME\",\"admin_password\":\"$AP\",\"viewer_password\":\"$VP\",\"teachers_password\":\"$TP\"}")
 AT=$(echo "$SJ" | jget 'd["session"]["access_token"]'); echo "::add-mask::$AT"
 echo "setup role: $(echo "$SJ" | jget 'd["profile"]["access_kind"]')" | tee -a $LOG
-echo "setup again: $(code "{\"action\":\"setup\",\"admin_password\":\"$TP2\",\"viewer_password\":\"$TP2\"}")" | tee -a $LOG
 CID=$(get "centers?select=id" "$AT" | jget 'd[0]["id"]')
 C1=$(uid); C2=$(uid); S1=$(uid); S2=$(uid)
 rest circles "$AT" "[{\"id\":\"$C1\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة أ\"},{\"id\":\"$C2\",\"center_id\":\"$CID\",\"name\":\"TEST حلقة ب\"}]" | tee -a $LOG
@@ -69,29 +68,29 @@ run_self viewer "$VP" 31_cloud_selftest_viewer
 run_self teacher "$TP" 32_cloud_selftest_teachers
 launch -autoLogin teacher -ciPass "$TP" -ciViewerPass "$VP" -startRoute "student/$S1"; sleep 12; shot 33_cloud_student_photo
 launch -autoLogin teacher -ciPass "$TP" -ciViewerPass "$VP" -startRoute "circle_report/$C1"; sleep 12; shot 34_cloud_today_report
-run_self admin "$AP" 35_cloud_selftest_admin
+# a teachers' session taken BEFORE the admin changes the teachers' password
+export SU K AP VP TP TP2 CID
+python3 ci/live_api.py before > shots/teachers_refresh.tmp 2>>$LOG
+# the admin, in the app: everything + changes the teachers' password to TP2 (app path)
+D=$(DATA); rm -f "$D/Documents/selftest.txt"
+launch -autoLogin admin -ciPass "$AP" -ciViewerPass "$VP" -selfTest YES -tryStudents "$S1:$C1,$S2:$C2" -ciNewTeachersPass "$TP2"
+for i in $(seq 1 45); do sleep 2; grep -q "^done" "$D/Documents/selftest.txt" 2>/dev/null && break; done
+echo "== selftest admin" | tee -a $LOG; cat "$D/Documents/selftest.txt" 2>/dev/null | tee -a $LOG
+shot 35_cloud_selftest_admin
 launch -autoLogin viewer -ciPass "$VP" -startRoute "students"; sleep 12; shot 36_cloud_viewer_students_photos
 
-# 5) Admin changes the teachers' password -> the old one stops working, the new one works
-TPT=$(fn "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$TP\"}" | jget 'd["session"]["refresh_token"]')
-echo "::add-mask::$TPT"
-echo "set teachers password: $(fn "{\"action\":\"set_password\",\"target\":\"teachers\",\"password\":\"$TP2\"}" "$AT")" | tee -a $LOG
-echo "old teachers password: $(code "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$TP\"}")" | tee -a $LOG
-echo "new teachers password: $(code "{\"action\":\"login\",\"kind\":\"teacher\",\"password\":\"$TP2\"}")" | tee -a $LOG
-echo "old refresh token: $(curl -s -o /dev/null -w "%{http_code}" -X POST "$SU/auth/v1/token?grant_type=refresh_token" -H "apikey: $K" -H "Content-Type: application/json" -d "{\"refresh_token\":\"$TPT\"}")" | tee -a $LOG
-echo "viewer password in the admin box: $(code "{\"action\":\"login\",\"kind\":\"admin\",\"password\":\"$VP\"}")" | tee -a $LOG
-# the app with the OLD teachers password
-D=$(DATA); rm -f "$D/Documents/selftest.txt"
-launch -autoLogin teacher -ciPass "$TP" -ciViewerPass "$VP" -selfTest YES -tryStudents "$S1:$C1"
-for i in $(seq 1 30); do sleep 2; grep -q "^done" "$D/Documents/selftest.txt" 2>/dev/null && break; done
-echo "== app with the old teachers password" | tee -a $LOG; cat "$D/Documents/selftest.txt" 2>/dev/null | tee -a $LOG
+# the app with the OLD teachers' password, then with the NEW one
+for P_ in old new; do
+  [ $P_ = old ] && PW="$TP" || PW="$TP2"
+  D=$(DATA); rm -f "$D/Documents/selftest.txt"
+  launch -autoLogin teacher -ciPass "$PW" -ciViewerPass "$VP" -selfTest YES -tryStudents "$S1:$C1"
+  for i in $(seq 1 30); do sleep 2; grep -q "^done" "$D/Documents/selftest.txt" 2>/dev/null && break; done
+  echo "== app with the $P_ teachers password" | tee -a $LOG; cat "$D/Documents/selftest.txt" 2>/dev/null | tee -a $LOG
+  shot "37_cloud_teachers_$P_"
+done
 
-# 6) What the server holds now (read as the admin)
-echo "server recitations:" | tee -a $LOG; get "recitations?select=student_id,notes,teacher_id,by_name" "$AT" | tee -a $LOG
-echo "server attendance:" | tee -a $LOG; get "attendance?select=student_id,day,status,recorded_by,by_name" "$AT" | tee -a $LOG
-echo "server students:" | tee -a $LOG; get "students?select=id,full_name,notes,circle_id,photo_path" "$AT" | tee -a $LOG
-echo "server teacher_names:" | tee -a $LOG; get "teacher_names?select=id,name" "$AT" | tee -a $LOG
-echo "server announcements:" | tee -a $LOG; get "announcements?select=id,title,by_name,created_by" "$AT" | tee -a $LOG
-cat shots/cloud_ids.txt | tee -a $LOG
+# server-side checks + what the server holds now + photo files removed through the storage API
+python3 ci/live_api.py after < shots/teachers_refresh.tmp 2>&1 | tee -a $LOG
+rm -f shots/teachers_refresh.tmp
 xcrun simctl spawn "$U" log show --last 15m --predicate 'process == "AlSiddiq" AND (messageType == fault OR eventMessage CONTAINS "ALSIDDIQ")' > shots/app_log.txt 2>/dev/null || true
 ls -la shots

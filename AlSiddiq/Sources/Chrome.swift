@@ -111,6 +111,7 @@ struct HomeHeader: View {
                     Text(title).font(T.titleLarge).foregroundColor(.white).lineLimit(1)
                 }
                 Spacer()
+                ToolsButton()
                 Button(action: onBell) {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "bell").font(.system(size: 19)).foregroundColor(.white)

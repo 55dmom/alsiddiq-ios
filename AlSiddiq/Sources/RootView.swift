@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject var model: AppModel
     @StateObject private var dialogs = DialogHost()
+    @StateObject private var tools = ToolsHost()
     @State private var splash = true
     let autoLogin: String?
     let startRoute: String?
@@ -38,6 +39,8 @@ struct RootView: View {
             }
         }
         .environmentObject(dialogs)
+        .environmentObject(tools)
+        .sheet(isPresented: $tools.open) { ToolsSheet().environmentObject(tools) }
         .environment(\.layoutDirection, .rightToLeft)
         .environment(\.locale, Locale(identifier: "ar"))
         .preferredColorScheme(.light)
@@ -52,6 +55,10 @@ struct RootView: View {
             let hold = UserDefaults.standard.double(forKey: "holdSplash") // CI screenshots of the splash
             try? await Task.sleep(nanoseconds: hold > 0 ? UInt64(hold * 1e9) : (autoLogin == nil ? 1_800_000_000 : 300_000_000))
             withAnimation { splash = false }
+            if let t = UserDefaults.standard.string(forKey: "openTool") { // CI screenshots
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                tools.show(ToolItem(rawValue: t))
+            }
         }
     }
 

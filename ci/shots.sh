@@ -46,5 +46,15 @@ shot 14_teacher_record teacher record/s2
 shot 15_teacher_attendance teacher attendance/c3
 shot 16_teacher_report teacher circle_report/c1
 shot 17_teacher_student_edit teacher student_edit/s1
+tool() { # name tool
+  t 20 xcrun simctl terminate "$U" $BID 2>/dev/null || true
+  t 60 xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -forceDemo YES -autoLogin viewer -startRoute home -openTool "$2" > /dev/null
+  sleep 9; t 30 xcrun simctl io "$U" screenshot "shots/$1.png" > /dev/null 2>&1; echo "shot $1"
+}
+tool 18_tools_menu menu
+tool 19a_tool_adhkar adhkar
+tool 19b_tool_duas duas
+tool 19c_tool_tasbeeh tasbeeh
+tool 19d_tool_asma asma
 xcrun simctl spawn "$U" log show --last 5m --predicate 'process == "AlSiddiq" AND messageType == fault' > shots/faults.txt 2>/dev/null || true
 ls -la shots

@@ -51,6 +51,9 @@ enum SelfTest {
             }
         }
         if user.role == .admin {
+            if let np = UserDefaults.standard.string(forKey: "ciNewTeachersPass"), !np.isEmpty {
+                await ok("app setAccessPassword(teachers)") { try await repo.setAccessPassword(target: .teacher, password: np) }
+            }
             await ok("app saveTeacherName") { try await repo.saveTeacherName(id: nil, name: "TEST معلم") }
             if let c = repo.snapshot.circles.first {
                 var c2 = c; c2.schedule = "selftest"
