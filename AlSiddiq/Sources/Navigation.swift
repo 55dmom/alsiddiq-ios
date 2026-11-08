@@ -8,6 +8,7 @@ enum Route: Hashable {
     case student(String), studentEdit(String, String?)
     case record(String)
     case announcements, announceNew, centerSettings, about
+    case tools   // «الأدوات» tab: the same menu as the old header button
     case passwords, teacherNames
     case circleReport(String)
     case roleLogin(Role)
@@ -39,6 +40,7 @@ enum Route: Hashable {
         case "announce_new": return .announceNew
         case "center": return .centerSettings
         case "about": return .about
+        case "tools": return .tools
         case "passwords": return .passwords
         case "teachers", "teacher_names": return .teacherNames
         case "circle_report": return .circleReport(arg ?? "")
@@ -62,6 +64,7 @@ func tabsFor(_ role: Role) -> [TabItem] {
         TabItem(route: .students, label: "الطلاب", icon: "graduationcap", selectedIcon: "graduationcap.fill"),
         TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
         TabItem(route: .reports, label: "التقارير", icon: "chart.bar.xaxis", selectedIcon: "chart.bar.fill"),
+        TabItem(route: .tools, label: "الأدوات", icon: "square.grid.3x3", selectedIcon: "square.grid.3x3.fill"),
         TabItem(route: .viewerSettings, label: "الإعدادات", icon: "gearshape", selectedIcon: "gearshape.fill")
     ]
     case .admin: return [
@@ -69,6 +72,7 @@ func tabsFor(_ role: Role) -> [TabItem] {
         TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
         TabItem(route: .students, label: "الطلاب", icon: "graduationcap", selectedIcon: "graduationcap.fill"),
         TabItem(route: .reports, label: "التقارير", icon: "chart.bar.xaxis", selectedIcon: "chart.bar.fill"),
+        TabItem(route: .tools, label: "الأدوات", icon: "square.grid.3x3", selectedIcon: "square.grid.3x3.fill"),
         TabItem(route: .more, label: "الإدارة", icon: "lock.shield", selectedIcon: "lock.shield.fill")
     ]
     case .teacher: return [
@@ -76,7 +80,8 @@ func tabsFor(_ role: Role) -> [TabItem] {
         TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
         TabItem(route: .recordStart, label: "تسجيل", icon: "plus.circle", selectedIcon: "plus.circle.fill"),
         TabItem(route: .attendance(nil), label: "الحضور", icon: "checklist", selectedIcon: "checklist"),
-        TabItem(route: .teacherMore, label: "المزيد", icon: "circle.grid.2x2", selectedIcon: "circle.grid.2x2.fill")
+        TabItem(route: .teacherMore, label: "المزيد", icon: "circle.grid.2x2", selectedIcon: "circle.grid.2x2.fill"),
+        TabItem(route: .tools, label: "الأدوات", icon: "square.grid.3x3", selectedIcon: "square.grid.3x3.fill")
     ]
     }
 }
@@ -89,7 +94,14 @@ final class Router: ObservableObject {
     @Published var tab = 0
     @Published var stack: [Route] = []
 
-    init(role: Role) { tabs = tabsFor(role) }
+    /// The signed-in member who was on the «الأدوات» tab: a theme picked there redraws the whole shell,
+    /// and the new shell opens on the same tab instead of jumping back to the home tab.
+    static var toolsTabUser: String?
+
+    init(role: Role, userId: String? = nil) {
+        tabs = tabsFor(role)
+        if let u = userId, u == Router.toolsTabUser, let i = tabs.firstIndex(where: { $0.route == .tools }) { tab = i }
+    }
 
     var current: Route { stack.last ?? tabs[tab].route }
     var showBar: Bool { stack.isEmpty }

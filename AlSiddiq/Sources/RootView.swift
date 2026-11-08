@@ -26,6 +26,9 @@ struct RootView: View {
             .id(theme.active.id)   // a theme change redraws everything in the new colours
             .animation(.easeInOut(duration: 0.35), value: splash)
             .animation(.easeInOut(duration: 0.35), value: model.user?.id)
+            .onChange(of: model.user?.id) { id in
+                if id == nil { Router.toolsTabUser = nil; tools.tabPath = [] }
+            }
 
             if let d = dialogs.content {
                 Color.black.opacity(0.32).ignoresSafeArea()
@@ -72,6 +75,12 @@ struct RootView: View {
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 tools.show(ToolItem(rawValue: t))
             }
+            #if DEBUG
+            if let t = UserDefaults.standard.string(forKey: "openTabTool"), let item = ToolItem(rawValue: t) { // CI screenshots: a tool opened from the «الأدوات» tab
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                tools.tabPath = [item]
+            }
+            #endif
         }
     }
 
@@ -145,11 +154,12 @@ struct MainShell: View {
     let startRoute: String?
     @StateObject private var router: Router
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var tools: ToolsHost
 
     init(user: Member, startRoute: String?) {
         self.user = user
         self.startRoute = startRoute
-        _router = StateObject(wrappedValue: Router(role: user.role))
+        _router = StateObject(wrappedValue: Router(role: user.role, userId: user.id))
     }
 
     var body: some View {
@@ -170,7 +180,7 @@ struct MainShell: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if router.showBar {
+            if router.showBar && !(router.tabs[router.tab].route == .tools && !tools.tabPath.isEmpty) {
                 BottomBar(tabs: router.tabs, selected: router.tab, unread: model.snap.unreadCount) { router.select($0) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -178,7 +188,10 @@ struct MainShell: View {
         .background(Brand.bg.ignoresSafeArea())
         .environmentObject(router)
         .onChange(of: router.stack.count) { _ in updateStatusBar() }
-        .onChange(of: router.tab) { _ in updateStatusBar() }
+        .onChange(of: router.tab) { _ in
+            updateStatusBar()
+            Router.toolsTabUser = router.tabs[router.tab].route == .tools ? user.id : nil
+        }
         .onAppear {
             updateStatusBar()
             if let s = startRoute, s != "home", let r = Route.parse(s) {
@@ -223,6 +236,7 @@ struct MainShell: View {
         case .announceNew: AnnounceNewScreen(user: user)
         case .centerSettings: CenterSettingsScreen(user: user)
         case .about: AboutScreen()
+        case .tools: ToolsTabScreen()
         case .passwords: PasswordsScreen(user: user)
         case .teacherNames: TeacherNamesScreen(user: user)
         case .circleReport(let cid): CircleReportScreen(user: user, circleId: cid)
@@ -259,7 +273,7 @@ struct BottomBar: View {
                             Image(systemName: sel ? t.selectedIcon : t.icon)
                                 .font(.system(size: 19, weight: sel ? .semibold : .regular))
                                 .foregroundColor(sel ? Brand.navy : Brand.muted)
-                                .frame(width: 60, height: 30)
+                                .frame(width: tabs.count > 5 ? 50 : 60, height: 30)
                                 .background(Capsule().fill(sel ? Brand.navySoft : Color.clear))
                             if t.route == .notifications && unread > 0 {
                                 Text("\(unread)").font(AppFont.f(10, .bold)).foregroundColor(.white)
@@ -269,11 +283,13 @@ struct BottomBar: View {
                             }
                         }
                         Text(t.label).font(T.labelSmall).foregroundColor(sel ? Brand.navy : Brand.muted).lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("tab_" + t.label)
                 .animation(.easeOut(duration: 0.2), value: sel)
             }
         }

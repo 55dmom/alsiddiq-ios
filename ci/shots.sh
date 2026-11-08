@@ -87,5 +87,14 @@ shot 38_viewer_circle_fee viewer circle/c1
 # offline: what a teacher sees with 2 entries still on the phone (Debug flag -ciPending, simulated state)
 EXTRA="-ciPending 2" shot 35_offline_pending_home teacher home 8
 EXTRA="-ciPending 2" shot 36_offline_pending_history teacher history/s1 8
+# «الأدوات» moved from the home header to the bottom bar (6 tabs for admin and viewer, 6 for teacher)
+shot 40_admin_home_bar admin home 8
+shot 41_teacher_home_bar teacher home 8
+shot 42_viewer_home_bar viewer home 8
+shot 43_tools_tab_admin admin tools 8
+shot 44_tools_tab_teacher teacher tools 8
+shot 45_tools_tab_viewer viewer tools 8
+EXTRA="-openTabTool adhkar" shot 46_tools_tab_tool_open admin tools 10
+EXTRA="-appTheme night" shot 47_tools_tab_night admin tools 8
 xcrun simctl spawn "$U" log show --last 5m --predicate 'process == "AlSiddiq" AND messageType == fault' > shots/faults.txt 2>/dev/null || true
 ls -la shots

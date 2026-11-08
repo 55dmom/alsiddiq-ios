@@ -58,13 +58,15 @@ enum ToolItem: String, CaseIterable, Identifiable, Hashable {
 final class ToolsHost: ObservableObject {
     @Published var open = false
     @Published var path: [ToolItem] = []
+    /// The «الأدوات» tab's own stack (the bottom bar hides while a tool is open on it).
+    @Published var tabPath: [ToolItem] = []
     func show(_ item: ToolItem? = nil) {
         path = item.map { [$0] } ?? []
         open = true
     }
 }
 
-/// The small «الأدوات» button (opening screen, home headers, settings).
+/// The small «الأدوات» button on the opening (password) screen.
 struct ToolsButton: View {
     var light = true
     @EnvironmentObject var tools: ToolsHost
@@ -130,26 +132,7 @@ struct ToolsSheet: View {
 
     private var stack: some View {
         NavigationStack(path: $tools.path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 10) {
-                        Image("Logo").resizable().scaledToFit().frame(width: 46, height: 46)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("الأدوات").font(T.titleLarge).foregroundColor(Brand.ink)
-                            Text("لكل من يفتح التطبيق، بدون كلمة سر").font(T.bodySmall).foregroundColor(Brand.muted)
-                        }
-                    }
-                    .padding(.bottom, 4)
-                    ForEach(ToolItem.tools) { item in ToolRow(item: item) }
-                    SectionLabel(text: "المظهر").padding(.top, 6)
-                    ToolRow(item: .themes)
-                    SectionLabel(text: "المركز").padding(.top, 6)
-                    ToolRow(item: .about)
-                    ToolRow(item: .developer)
-                }
-                .padding(18)
-            }
-            .background(Brand.bg.ignoresSafeArea())
+            ToolsMenuList()
             .navigationDestination(for: ToolItem.self) { $0.screen }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -158,6 +141,47 @@ struct ToolsSheet: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+/// The «الأدوات» menu itself: the 8 tools in order, then «الثيمات», «عن المركز» and «تواصل مع المطوّر».
+/// Shown in the sheet (opening screen, settings) and as the «الأدوات» tab.
+struct ToolsMenuList: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image("Logo").resizable().scaledToFit().frame(width: 46, height: 46)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("الأدوات").font(T.titleLarge).foregroundColor(Brand.ink)
+                        Text("لكل من يفتح التطبيق، بدون كلمة سر").font(T.bodySmall).foregroundColor(Brand.muted)
+                    }
+                }
+                .padding(.bottom, 4)
+                ForEach(ToolItem.tools) { item in ToolRow(item: item) }
+                SectionLabel(text: "المظهر").padding(.top, 6)
+                ToolRow(item: .themes)
+                SectionLabel(text: "المركز").padding(.top, 6)
+                ToolRow(item: .about)
+                ToolRow(item: .developer)
+            }
+            .padding(18)
+        }
+        .background(Brand.bg.ignoresSafeArea())
+    }
+}
+
+/// The «الأدوات» tab in the bottom bar: the same menu (no password), each tool opens full screen with a back button.
+struct ToolsTabScreen: View {
+    @EnvironmentObject var tools: ToolsHost
+    var body: some View {
+        NavigationStack(path: $tools.tabPath) {
+            ToolsMenuList()
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: ToolItem.self) { $0.screen }
+        }
+        .tint(Brand.navy)
+        .accessibilityIdentifier("toolsTab")
     }
 }
 
