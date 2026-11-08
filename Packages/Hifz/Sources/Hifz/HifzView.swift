@@ -137,21 +137,7 @@ public struct HifzView: View {
             }
         }
         .sheet(isPresented: $m.showPicker) { NavigationStack { picker }.hfRTL() }
-        .task(id: String(m.surah) + ":" + String(m.from) + ":" + String(m.to) + ":" + String(m.mode.rawValue)) {
-            if m.mode == .recite {
-                rec.load(surah: m.surah, ayahs: m.range) { a in HfModel.words(HfQuran.shared.split(m.surah, a).rest) }
-                #if DEBUG
-                let n = UserDefaults.standard.integer(forKey: "ciReciteDemo") // CI screenshots only
-                if n > 0 { rec.demo(n) }
-                #endif
-            } else {
-                rec.stop()
-            }
-        }
-        .onDisappear { rec.stop() }
-        #if DEBUG
-        .onAppear { if UserDefaults.standard.string(forKey: "ciHifzMode") == "recite" { m.mode = .recite } }
-        #endif
+        .modifier(HfReciteHooks(m: m, rec: rec))
         .tint(HfTheme.accent)
         .hfRTL()
     }
@@ -446,5 +432,31 @@ public struct HifzView: View {
         .navigationTitle(Text(verbatim: "اختر السورة"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .cancellationAction) { Button { m.showPicker = false } label: { Text(verbatim: "إغلاق") } } }
+    }
+}
+
+/// «تسميع» wiring, kept apart from the main view's modifier chain: loads the chosen range, stops the mic when leaving.
+private struct HfReciteHooks: ViewModifier {
+    @ObservedObject var m: HfModel
+    @ObservedObject var rec: HfReciter
+    private var rangeId: String { String(m.surah) + ":" + String(m.from) + ":" + String(m.to) + ":" + String(m.mode.rawValue) }
+    func body(content: Content) -> some View {
+        content
+            .task(id: rangeId) { reload() }
+            .onDisappear { rec.stop() }
+            .onAppear {
+                #if DEBUG
+                if UserDefaults.standard.string(forKey: "ciHifzMode") == "recite" { m.mode = .recite } // CI screenshots only
+                #endif
+            }
+    }
+    private func reload() {
+        guard m.mode == .recite else { rec.stop(); return }
+        let s = m.surah
+        rec.load(surah: s, ayahs: m.range) { a in HfModel.words(HfQuran.shared.split(s, a).rest) }
+        #if DEBUG
+        let n = UserDefaults.standard.integer(forKey: "ciReciteDemo") // CI screenshots only
+        if n > 0 { rec.demo(n) }
+        #endif
     }
 }
