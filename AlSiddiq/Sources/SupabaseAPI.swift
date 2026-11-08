@@ -374,12 +374,15 @@ enum Rows {
         guard let id = s(o, "id") else { return nil }
         return Announcement(id: id, title: s(o, "title") ?? "", body: s(o, "body") ?? "",
                             audience: Audience(rawValue: (s(o, "audience") ?? "").uppercased()) ?? .all,
-                            createdBy: s(o, "created_by") ?? "", createdAt: ts(o["created_at"]), byName: s(o, "by_name") ?? "")
+                            createdBy: s(o, "created_by") ?? "", createdAt: ts(o["created_at"]), byName: s(o, "by_name") ?? "",
+                            imagePath: s(o, "image_path"))
     }
 
     static func announcementRow(_ a: Announcement, _ center: String) -> JSON {
-        ["id": a.id, "center_id": center, "title": a.title, "body": a.body, "audience": a.audience.rawValue.lowercased(),
+        var row: JSON = ["id": a.id, "center_id": center, "title": a.title, "body": a.body, "audience": a.audience.rawValue.lowercased(),
          "created_by": a.createdBy, "created_at": iso(a.createdAt), "by_name": a.byName.isEmpty ? NSNull() : a.byName]
+        if let p = a.imagePath { row["image_path"] = p }   // v3.8: only sent with a photo (admin)
+        return row
     }
 
     static func teacherName(_ o: JSON) -> TeacherName? {

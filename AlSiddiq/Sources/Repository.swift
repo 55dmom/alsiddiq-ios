@@ -84,6 +84,11 @@ protocol AppRepository: AnyObject {
     /// v3.8 «لوحة الحلقة»: the admin on any circle, a teacher on his own. jpeg nil = remove.
     func setCirclePhoto(circleId: String, jpeg: Data?) async throws
     func circlePhoto(_ c: StudyCircle) async -> UIImage?
+    /// v3.8: the admin's circle edit — the circle's teachers (the first one is circles.teacher_id).
+    func setCircleTeachers(circleId: String, teacherIds: [String]) async throws
+    /// v3.8: an announcement photo (admin): uploaded first, returns its path for Announcement.imagePath.
+    func uploadAnnouncementImage(announcementId: String, jpeg: Data) async throws -> String
+    func announcementImage(_ path: String) async -> UIImage?
     /// Set (jpeg) or remove (nil) the student's photo.
     func setStudentPhoto(studentId: String, jpeg: Data?) async throws
     /// The student's photo, cached on the phone.

@@ -83,6 +83,13 @@ final class DemoRepository: AppRepository {
         }
         if UserDefaults.standard.bool(forKey: "ciV38Demo") {
             s.circles = s.circles.map { var c = $0; if c.photoPath == nil { c.photoPath = "ci/home_bg_real.jpg" }; return c }
+            // a second teacher on the first circle, and a photo on the newest announcement
+            if (s.circleTeachers ?? []).isEmpty, let c = s.circles.first, let other = s.teachers().first(where: { $0.id != c.teacherId }) {
+                s.circleTeachers = [CircleTeacher(circleId: c.id, teacherId: other.id)]
+            }
+            if let i = s.announcements.indices.max(by: { s.announcements[$0].createdAt < s.announcements[$1].createdAt }), s.announcements[i].imagePath == nil {
+                s.announcements[i].imagePath = "ci/home_bg_real.jpg"
+            }
         }
         // CI screenshots only: "-ciV38Demo YES" fills a little sample teacher attendance and budget
         if user.role == .admin, UserDefaults.standard.bool(forKey: "ciV38Demo") {
@@ -428,6 +435,32 @@ final class DemoRepository: AppRepository {
         }
         store.photos["circle/" + circleId] = jpeg
         persist(); publish()
+    }
+
+    func setCircleTeachers(circleId: String, teacherIds: [String]) async throws {
+        try mutate { d, u in
+            try require(Permissions.canManageCircles(u))
+            var kept: [String] = []
+            for t in teacherIds where !kept.contains(t) { kept.append(t) }
+            d.circleTeachers = (d.circleTeachers ?? []).filter { $0.circleId != circleId } + kept.map { CircleTeacher(circleId: circleId, teacherId: $0) }
+        }
+    }
+
+    func uploadAnnouncementImage(announcementId: String, jpeg: Data) async throws -> String {
+        let u = try requireUser()
+        try require(u.role == .admin)
+        let path = "demo/announcements/\(announcementId).jpg"
+        store.photos["ann/" + path] = jpeg
+        persist()
+        return path
+    }
+
+    func announcementImage(_ path: String) async -> UIImage? {
+        if let d = store.photos["ann/" + path] { return UIImage(data: d) }
+        #if DEBUG
+        if path.hasPrefix("ci/"), let p = Bundle.main.path(forResource: "home_bg_real", ofType: "jpg") { return UIImage(contentsOfFile: p) }
+        #endif
+        return nil
     }
 
     func circlePhoto(_ c: StudyCircle) async -> UIImage? {

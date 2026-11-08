@@ -16,14 +16,14 @@ enum Permissions {
     /// v3.3: does this account teach (may edit) this circle?
     static func teaches(_ u: Member, _ circleId: String?, _ snap: CenterSnapshot) -> Bool {
         if u.role == .admin { return true }
-        guard u.role == .teacher, let c = circleId else { return false }
-        return snap.circle(c)?.teacherId == u.id
+        guard u.role == .teacher, let c = circleId, let circle = snap.circle(c) else { return false }
+        return snap.teacherIds(of: circle).contains(u.id)   // v3.8: any listed teacher of the circle
     }
     /// The circles this account may edit (all for the admin, his own for a teacher, none for the viewer).
     static func editableCircles(_ u: Member, _ snap: CenterSnapshot) -> [StudyCircle] {
         switch u.role {
         case .admin: return snap.circles.sorted { $0.name < $1.name }
-        case .teacher: return snap.circles.filter { $0.teacherId == u.id }.sorted { $0.name < $1.name }
+        case .teacher: return snap.circles.filter { snap.teacherIds(of: $0).contains(u.id) }.sorted { $0.name < $1.name }
         default: return []
         }
     }

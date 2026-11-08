@@ -104,6 +104,7 @@ struct ViewerHome: View {
                             AppCard(padding: 12) {
                                 Text(a.title).font(T.titleSmall).foregroundColor(Brand.ink)
                                 Text(a.body).font(T.bodySmall).foregroundColor(Brand.muted).lineLimit(4).padding(.top, 4)
+                                if let p = a.imagePath { AnnouncementPhoto(path: p, maxHeight: 150).padding(.top, 6) }   // v3.8
                                 Text(Fmt.relative(a.createdAt)).font(T.labelSmall).foregroundColor(Brand.muted).padding(.top, 4)
                             }
                         }

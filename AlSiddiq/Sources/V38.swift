@@ -664,3 +664,41 @@ struct CircleStarLine: View {
         .accessibilityIdentifier("circleStar_" + circleId)
     }
 }
+
+
+// MARK: an announcement's photo (announcements.image_path; V38_ADMIN.md §8): full width, tap = full screen
+
+struct AnnouncementPhoto: View {
+    let path: String
+    var maxHeight: CGFloat = 260
+    @EnvironmentObject var model: AppModel
+    @State private var img: UIImage?
+    @State private var full = false
+    var body: some View {
+        Group {
+            if let img = img {
+                Button { full = true } label: {
+                    Image(uiImage: img).resizable().scaledToFill()
+                        .frame(maxWidth: .infinity).frame(height: min(maxHeight, 220))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            } else {
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.line.opacity(0.5)).frame(height: 120)
+                    .overlay(ProgressView())
+            }
+        }
+        .task(id: path) { img = await model.repo.announcementImage(path) }
+        .fullScreenCover(isPresented: $full) {
+            ZStack(alignment: .topLeading) {
+                Color.black.ignoresSafeArea()
+                if let img = img { Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity) }
+                Button { full = false } label: {
+                    Image(systemName: "xmark").font(.system(size: 18, weight: .bold)).foregroundColor(.white)
+                        .frame(width: 44, height: 44).background(SwiftUI.Circle().fill(Color.white.opacity(0.18)))
+                }
+                .padding(16)
+            }
+        }
+    }
+}

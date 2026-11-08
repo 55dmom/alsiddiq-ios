@@ -46,10 +46,11 @@ final class NavBackUITests: XCTestCase {
         note("\(tag): list shown=\(any(app, marker).waitForExistence(timeout: 10))")
         for (k, row) in rows.enumerated() {
             let cell = any(app, row)
-            if !cell.waitForExistence(timeout: 4) {
-                app.swipeUp()
-            }
-            guard cell.waitForExistence(timeout: 4) else { note("\(tag) | \(row) | row not found"); continue }
+            _ = cell.waitForExistence(timeout: 4)
+            // bring the row on screen (the lists are long on an SE)
+            for _ in 0..<5 where !(cell.exists && cell.isHittable) { app.swipeUp(); sleep(1) }
+            for _ in 0..<8 where !(cell.exists && cell.isHittable) { app.swipeDown(); sleep(1) }
+            guard cell.exists && cell.isHittable else { note("\(tag) | \(row) | row not reachable"); continue }
             cell.tap()
             sleep(2)
             if k == 0 { shot("N_\(tag)_\(k)_open") }
@@ -69,7 +70,7 @@ final class NavBackUITests: XCTestCase {
 
     func testAdminRowsReturnToTheList() throws {
         continueAfterFailure = true
-        check("admin", "more", list: "كلمات السر", rows: ["الثيمات", "عن المركز", "تواصل مع المطوّر", "عن التطبيق", "المتفوقون", "حضور وغياب المعلمين", "الميزانية", "كشف الاشتراكات"], tag: "admin")
+        check("admin", "more", list: "كلمات السر", rows: ["المتفوقون", "حضور وغياب المعلمين", "الميزانية", "كشف الاشتراكات", "الثيمات", "عن المركز", "تواصل مع المطوّر", "عن التطبيق"], tag: "admin")
     }
 
     func testViewerSettingsReturnToTheList() throws {

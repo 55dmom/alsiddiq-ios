@@ -114,8 +114,7 @@ struct CircleEditScreen: View {
     @EnvironmentObject var dialogs: DialogHost
     @State private var loaded = false
     @State private var name = ""
-    @State private var teacherName: String?
-    @State private var teacherId: String?
+    @State private var teacherIds: [String] = []
     @State private var level = ""
     @State private var schedule = ""
     @State private var capacity = "15"
@@ -130,11 +129,36 @@ struct CircleEditScreen: View {
             AppCard {
                 VStack(alignment: .leading, spacing: 10) {
                     Field(label: "اسم الحلقة", text: $name)
-                    SelectorField(label: "المعلم (اختياري)", value: teacherName ?? "اختر المعلم") {
-                        dialogs.show(PickerDialog(title: "اختر المعلم", items: [TeacherName(id: "", name: "بدون معلم")] + snap.teachers(), label: { $0.name }) {
-                            teacherName = $0.id.isEmpty ? nil : $0.name
-                            teacherId = $0.id.isEmpty ? nil : $0.id
-                        })
+                    // v3.8: more than one teacher per circle (the first is the circle's main teacher)
+                    Text("المعلمون").font(T.labelMedium).foregroundColor(Brand.muted).padding(.top, 2)
+                    if teacherIds.isEmpty { Text("بدون معلم").font(T.bodySmall).foregroundColor(Brand.muted) }
+                    ForEach(teacherIds, id: \.self) { tid in
+                        HStack(spacing: 10) {
+                            Avatar(name: snap.teacherName(tid) ?? "؟", size: 32, color: Brand.maroon)
+                            Text(snap.teacherName(tid) ?? "معلم").font(T.bodyLarge).foregroundColor(Brand.ink)
+                            Spacer()
+                            Button { teacherIds.removeAll { $0 == tid } } label: {
+                                Image(systemName: "xmark.circle.fill").font(.system(size: 20)).foregroundColor(Brand.red.opacity(0.8))
+                            }
+                            .accessibilityLabel("إزالة")
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.card))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.line, lineWidth: 1.2))
+                    }
+                    let free = snap.teachers().filter { !teacherIds.contains($0.id) }
+                    if !free.isEmpty {
+                        Button {
+                            dialogs.show(PickerDialog(title: "إضافة أستاذ", items: free, label: { $0.name }) { teacherIds.append($0.id) })
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.badge.plus").font(.system(size: 14, weight: .semibold))
+                                Text("إضافة أستاذ").font(T.labelLarge)
+                            }
+                            .foregroundColor(Brand.navy).padding(.horizontal, 12).frame(height: 36)
+                            .background(Capsule().fill(Brand.navy.opacity(0.08)))
+                        }
+                        .accessibilityIdentifier("addCircleTeacher")
                     }
                     Text("المستوى").font(T.labelMedium).foregroundColor(Brand.muted).padding(.top, 2)
                     ChoiceChips(options: levels, selected: levels.firstIndex(of: level) ?? -1) { level = levels[$0] }
@@ -151,14 +175,20 @@ struct CircleEditScreen: View {
             PrimaryButton(title: existing == nil ? "إنشاء الحلقة" : "حفظ") {
                 var c = existing ?? StudyCircle(id: "", name: "", teacherId: nil)
                 c.name = name.trimmingCharacters(in: .whitespaces)
-                c.teacherName = teacherName
-                c.teacherId = teacherId   // v3.3: the teacher ACCOUNT who may edit this circle
+                // v3.8: the first listed teacher is circles.teacher_id; all of them go to circle_teachers
+                c.teacherId = teacherIds.first
+                c.teacherName = teacherIds.first.flatMap { snap.teacherName($0) }
                 c.level = level
                 c.schedule = schedule.trimmingCharacters(in: .whitespaces)
                 c.capacity = Int(capacity) ?? 15
                 c.feeYer = Int(fee)
                 c.feePeriod = c.feeYer == nil ? nil : feePeriod
-                model.run(existing == nil ? "تم إنشاء الحلقة" : "تم الحفظ", { try await model.repo.saveCircle(c) }) { _ in router.back() }
+                let ids = teacherIds
+                model.run(existing == nil ? "تم إنشاء الحلقة" : "تم الحفظ", {
+                    let saved = try await model.repo.saveCircle(c)
+                    try await model.repo.setCircleTeachers(circleId: saved.id, teacherIds: ids)
+                    return saved
+                }) { _ in router.back() }
             }
             if let ex = existing {
                 Button {
@@ -172,7 +202,7 @@ struct CircleEditScreen: View {
             guard !loaded else { return }
             loaded = true
             if let e = model.snap.circle(id) {
-                name = e.name; teacherName = model.snap.teacherName(of: e); teacherId = e.teacherId; level = Fmt.level(e.level); schedule = e.schedule; capacity = String(e.capacity)
+                name = e.name; teacherIds = model.snap.teacherIds(of: e); level = Fmt.level(e.level); schedule = e.schedule; capacity = String(e.capacity)
                 fee = e.feeYer.map(String.init) ?? ""; feePeriod = e.feePeriod ?? "monthly"
             }
         }

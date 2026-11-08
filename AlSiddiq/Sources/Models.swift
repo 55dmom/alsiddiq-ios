@@ -174,6 +174,14 @@ struct Announcement: Codable, Identifiable, Equatable, Hashable {
     var createdBy: String
     var createdAt: Date = Date()
     var byName: String = ""
+    /// v3.8: an optional photo (admin only), in the student-photos bucket.
+    var imagePath: String? = nil
+}
+
+/// v3.8: one extra teacher of a circle (circle_teachers).
+struct CircleTeacher: Codable, Equatable, Hashable {
+    var circleId: String
+    var teacherId: String
 }
 
 struct AppNotification: Codable, Identifiable, Equatable, Hashable {
@@ -215,13 +223,28 @@ struct CenterSnapshot: Codable, Equatable {
     var budget: [BudgetEntry]? = nil
     /// v3.8 «كشف الاشتراكات»: the admin gets every student's months, a teacher his own circle's; nil for the general view.
     var subscriptions: [StudentSubscription]? = nil
+    /// v3.8: extra teachers of a circle (circle_teachers); a circle's teachers = teacherId ∪ these rows.
+    var circleTeachers: [CircleTeacher]? = nil
 
     func member(_ id: String?) -> Member? { members.first { $0.id == id } }
     func circle(_ id: String?) -> StudyCircle? { circles.first { $0.id == id } }
     /// The name of a circle's teacher (from the admin's list of teacher names).
     func teacherName(of c: StudyCircle) -> String? {
+        // v3.8: more than one teacher → all names joined with «، »
+        let ids = teacherIds(of: c)
+        if ids.count > 1 {
+            let names = ids.compactMap { teacherName($0) }
+            if !names.isEmpty { return names.joined(separator: "، ") }
+        }
         if let n = c.teacherName, !n.isEmpty { return n }
         return teacherName(c.teacherId)
+    }
+    /// v3.8: every teacher account of a circle, the main one (teacher_id) first, no duplicates.
+    func teacherIds(of c: StudyCircle) -> [String] {
+        var out: [String] = []
+        if let t = c.teacherId, !t.isEmpty { out.append(t) }
+        for r in (circleTeachers ?? []) where r.circleId == c.id && !out.contains(r.teacherId) { out.append(r.teacherId) }
+        return out
     }
     func teacherName(_ id: String?) -> String? {
         guard let id = id else { return nil }
@@ -234,7 +257,7 @@ struct CenterSnapshot: Codable, Equatable {
         members.filter { $0.role == .teacher && $0.active }.map { TeacherName(id: $0.id, name: $0.fullName) }.sorted { $0.name < $1.name }
     }
     /// v3.3: the circles this teacher account teaches.
-    func circles(of teacherId: String) -> [StudyCircle] { circles.filter { $0.teacherId == teacherId } }
+    func circles(of teacherId: String) -> [StudyCircle] { circles.filter { teacherIds(of: $0).contains(teacherId) } }
     var unreadCount: Int { notifications.filter { !$0.read }.count }
     var events: [AdminEvent] { (adminEvents ?? []).sorted { $0.createdAt > $1.createdAt } }
     var unreadEvents: Int { (adminEvents ?? []).filter { $0.readAt == nil }.count }

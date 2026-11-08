@@ -292,6 +292,7 @@ final class CloudRepository: AppRepository {
         async let budgetRows = adminRows(t, isAdmin, "budget_entries", "select=*&order=day.desc")
         // v3.8: RLS gives the admin every student's months and a teacher his own circle's; the general view never asks
         async let subRows = adminRows(t, me.role != .viewer, "student_subscriptions", "select=*&order=month.desc")
+        async let ctRows = api.selectAll(token: t, table: "circle_teachers", query: "select=circle_id,teacher_profile_id&order=created_at")
 
         let members = (try await profiles).compactMap { Rows.member($0) }
         if !members.contains(where: { $0.id == me.id }) {
@@ -321,6 +322,11 @@ final class CloudRepository: AppRepository {
         fresh.teacherMarks = isAdmin ? ((try? await tmarks) ?? []).compactMap { Rows.teacherMark($0) } : nil
         fresh.budget = isAdmin ? ((try? await budgetRows) ?? []).compactMap { Rows.budgetEntry($0) } : nil
         fresh.subscriptions = me.role != .viewer ? ((try? await subRows) ?? []).compactMap { Rows.subscription($0) } : nil
+        // v3.8: a server without circle_teachers = one teacher per circle, as before
+        fresh.circleTeachers = ((try? await ctRows) ?? []).compactMap { o -> CircleTeacher? in
+            guard let c = o["circle_id"] as? String, let t = o["teacher_profile_id"] as? String else { return nil }
+            return CircleTeacher(circleId: c, teacherId: t)
+        }
 
         // Writes still waiting stay visible on screen until the server has them.
         let merged = st.outbox.isEmpty ? fresh : overlayPending(fresh)
@@ -385,6 +391,7 @@ final class CloudRepository: AppRepository {
         if st.outbox.contains(where: { $0.table == "teacher_attendance" }), out.teacherMarks != nil { out.teacherMarks = old.teacherMarks ?? out.teacherMarks }
         if st.outbox.contains(where: { $0.table == "budget_entries" }), out.budget != nil { out.budget = old.budget ?? out.budget }
         if st.outbox.contains(where: { $0.table == "student_subscriptions" }), out.subscriptions != nil { out.subscriptions = old.subscriptions ?? out.subscriptions }
+        if st.outbox.contains(where: { $0.table == "circle_teachers" }) { out.circleTeachers = old.circleTeachers ?? out.circleTeachers }
         if st.outbox.contains(where: { $0.table == "honor_cards" }) {
             let have = Set((out.honorCards ?? []).map { $0.id })
             out.honorCards = (old.honorCards ?? []).filter { !have.contains($0.id) } + (out.honorCards ?? [])
@@ -854,6 +861,45 @@ final class CloudRepository: AppRepository {
         if let old = old, old != newPath { Task { try? await api.storageDelete(token: t, bucket: Self.bucket, path: old) } }
     }
 
+    func setCircleTeachers(circleId: String, teacherIds: [String]) async throws {
+        try require(Permissions.canManageCircles(try me()))
+        var kept: [String] = []
+        for t in teacherIds where !kept.contains(t) { kept.append(t) }
+        let delFilter = kept.isEmpty ? "circle_id=eq.\(circleId)" : "circle_id=eq.\(circleId)&teacher_profile_id=not.in.(\(kept.joined(separator: ",")))"
+        _ = try await write(PendingOp(type: "delete", table: "circle_teachers", filter: delFilter), ()) { d in
+            d.circleTeachers = (d.circleTeachers ?? []).filter { $0.circleId != circleId || kept.contains($0.teacherId) }
+        }
+        guard !kept.isEmpty else { return }
+        let rows: [JSON] = kept.map { ["circle_id": circleId, "teacher_profile_id": $0] }
+        _ = try await write(PendingOp(type: "upsert", table: "circle_teachers", body: json(rows), onConflict: "circle_id,teacher_profile_id", ignoreDuplicates: true), ()) { d in
+            var list = (d.circleTeachers ?? []).filter { $0.circleId != circleId }
+            list += kept.map { CircleTeacher(circleId: circleId, teacherId: $0) }
+            d.circleTeachers = list
+        }
+    }
+
+    func uploadAnnouncementImage(announcementId: String, jpeg: Data) async throws -> String {
+        try require(try me().role == .admin)
+        let t: String
+        do { t = try await token() } catch is OfflineError { throw AppError.network("الصورة تحتاج اتصالاً بالإنترنت") }
+        let rnd = String(newId().replacingOccurrences(of: "-", with: "").prefix(8))
+        let path = "\(try center())/announcements/\(announcementId)/\(rnd).jpg"
+        do { try await api.storageUpload(token: t, bucket: Self.bucket, path: path, data: jpeg) }
+        catch is OfflineError { throw AppError.network("الصورة تحتاج اتصالاً بالإنترنت") }
+        if let img = UIImage(data: jpeg) { photoCache[path] = img; savePhotoFile(path, jpeg) }
+        return path
+    }
+
+    func announcementImage(_ path: String) async -> UIImage? {
+        if let img = photoCache[path] { return img }
+        if let d = try? Data(contentsOf: photoFile(path)), let img = UIImage(data: d) { photoCache[path] = img; return img }
+        guard let t = try? await token(), let d = try? await api.storageDownload(token: t, bucket: Self.bucket, path: path),
+              let img = UIImage(data: d) else { return nil }
+        photoCache[path] = img
+        savePhotoFile(path, d)
+        return img
+    }
+
     func circlePhoto(_ c: StudyCircle) async -> UIImage? {
         guard let path = c.photoPath, !path.isEmpty else { return nil }
         if let img = photoCache[path] { return img }
@@ -932,7 +978,10 @@ final class CloudRepository: AppRepository {
     }
 
     func deleteAnnouncement(_ id: String) async throws {
+        let img = st.cache.announcements.first { $0.id == id }?.imagePath
         _ = try await write(PendingOp(type: "delete", table: "announcements", filter: "id=eq.\(id)"), ()) { $0.announcements.removeAll { $0.id == id } }
+        // v3.8: its photo too (best effort)
+        if let p = img, let t = try? await token() { Task { try? await api.storageDelete(token: t, bucket: Self.bucket, path: p) } }
     }
 
     func markNotificationRead(_ id: String) async throws {
