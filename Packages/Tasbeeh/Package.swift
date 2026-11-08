@@ -9,6 +9,6 @@ let package = Package(
         .library(name: "Tasbeeh", targets: ["Tasbeeh"])
     ],
     targets: [
-        .target(name: "Tasbeeh")
+        .target(name: "Tasbeeh", resources: [.process("Resources")])
     ]
 )

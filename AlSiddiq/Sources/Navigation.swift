@@ -9,6 +9,8 @@ enum Route: Hashable {
     case record(String)
     case announcements, announceNew, centerSettings, about
     case tools   // «الأدوات» tab: the same menu as the old header button
+    case adminEvents, adminEvent(String)   // v3.6 the admin's bell
+    case honors, honorPublish               // v3.7 «المتفوقون»
     case passwords, teacherNames
     case circleReport(String)
     case roleLogin(Role)
@@ -41,6 +43,10 @@ enum Route: Hashable {
         case "center": return .centerSettings
         case "about": return .about
         case "tools": return .tools
+        case "events": return .adminEvents
+        case "event": return arg.map { .adminEvent($0) }
+        case "honors": return .honors
+        case "honor_publish": return .honorPublish
         case "passwords": return .passwords
         case "teachers", "teacher_names": return .teacherNames
         case "circle_report": return .circleReport(arg ?? "")

@@ -119,7 +119,7 @@ struct AboutCenterScreen: View {
             .padding(18)
         }
         .background(Brand.bg.ignoresSafeArea())
-        .navigationTitle("عن المركز")
+        .appNavTitle("عن المركز")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .sheet(isPresented: $editing) {
@@ -258,7 +258,7 @@ private struct AboutTextEditor: View {
         NavigationStack {
             TextEditor(text: $text).font(AppFont.f(16)).padding(12)
                 .background(Brand.bg.ignoresSafeArea())
-                .navigationTitle("نص «عن المركز»").navigationBarTitleDisplayMode(.inline)
+                .appNavTitle("نص «عن المركز»").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) { Button("حفظ") { onSave(text); dismiss() }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }

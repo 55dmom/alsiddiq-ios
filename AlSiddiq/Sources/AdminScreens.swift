@@ -64,6 +64,7 @@ struct ViewerHome: View {
                         StatTile(label: "آيات الأسبوع", value: "\(stats.ayatThisWeek)", icon: "book", tint: Brand.navy)
                         StatTile(label: "حضور اليوم", value: stats.attendanceToday > 0 ? Fmt.pct(stats.attendanceToday) : "—", icon: "checklist", tint: Brand.maroon)
                     }.padding(.top, 10)
+                    HonorsHomeCard(user: user).padding(.top, 12)
                     SectionHeader(title: "التفاعل", action: "التقارير") { router.go(.reports) }
                     AppCard {
                         Text("عدد السجلات يومياً — آخر 14 يوماً").font(T.bodySmall).foregroundColor(Brand.muted)
@@ -110,7 +111,7 @@ struct ViewerHome: View {
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
         }
-        .background(Brand.bg.ignoresSafeArea())
+        .background(HomeBackdrop())
     }
 }
 
@@ -195,6 +196,8 @@ struct MoreScreen: View {
             MenuRow(title: "تقرير اليوم للحلقات", sub: "كم حفظوا ومن غاب", icon: "doc.text") { router.go(.circleReport("")) }
             MenuRow(title: "الإعلانات", sub: "\(snap.announcements.count) إعلان", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "المكافآت", sub: "النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
+            MenuRow(title: "المتفوقون", sub: "اظهر تفوق الطالب", icon: "rosette", tint: Brand.gold) { router.go(.honors) }
+            MenuRow(title: "نشاط المعلمين", sub: snap.unreadEvents > 0 ? "\(snap.unreadEvents) جديد" : "تسجيل الطلاب وفصلهم", icon: "bell.badge") { router.go(.adminEvents) }
             MenuRow(title: "بيانات المركز", sub: snap.center.name, icon: "building.columns") { router.go(.centerSettings) }
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }

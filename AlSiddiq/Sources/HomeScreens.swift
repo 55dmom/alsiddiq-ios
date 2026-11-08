@@ -14,7 +14,7 @@ struct AdminHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HomeHeader(greeting: "السلام عليكم ورحمة الله", title: snap.center.name,
-                           subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))", unread: snap.unreadCount) { router.go(.announcements) }
+                           subtitle: "\(Fmt.dayTitle(today)) • \(Fmt.hijri(today))", unread: snap.unreadEvents + snap.unreadCount) { router.go(.adminEvents) }
                 VStack(alignment: .leading, spacing: 0) {
                     RoleStrip(user: user).padding(.top, 12)
                     if model.isDemo { DemoBanner().padding(.top, 10) }
@@ -34,6 +34,7 @@ struct AdminHome: View {
                         QuickAction(label: "تسجيل", icon: "square.and.pencil") { router.go(.recordStart) }
                         QuickAction(label: "كلمات السر", icon: "key") { router.go(.passwords) }
                     }
+                    HonorsHomeCard(user: user).padding(.top, 12)
                     SectionHeader(title: "نشاط التسميع", action: "التقارير") { router.go(.reports) }
                     AppCard {
                         Text("عدد السجلات يومياً — آخر 14 يوماً").font(T.bodySmall).foregroundColor(Brand.muted)
@@ -70,7 +71,7 @@ struct AdminHome: View {
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
         }
-        .background(Brand.bg.ignoresSafeArea())
+        .background(HomeBackdrop())
     }
 }
 
@@ -115,6 +116,7 @@ struct TeacherHome: View {
                 VStack(alignment: .leading, spacing: 0) {
                     RoleStrip(user: user).padding(.top, 12)
                     if model.isDemo { DemoBanner().padding(.top, 10) }
+                    HonorsHomeCard(user: user).padding(.top, 12)
                     SectionHeader(title: "الحلقة")
                     if circles.isEmpty {
                         EmptyState(title: "لا توجد حلقات", message: "تنشئها الإدارة من الإعدادات ← الإدارة")
@@ -179,6 +181,6 @@ struct TeacherHome: View {
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
         }
-        .background(Brand.bg.ignoresSafeArea())
+        .background(HomeBackdrop())
     }
 }

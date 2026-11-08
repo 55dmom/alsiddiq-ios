@@ -226,7 +226,6 @@ final class ThemeStore: ObservableObject {
         let t = forced?.theme ?? chosen
         occasion = forced
         Self.palette = t.palette
-        Self.publishToolPalette(t.palette)
         if t != active { active = t }
         AppFont.applyBars()
     }
@@ -267,7 +266,7 @@ struct ThemesScreen: View {
             .padding(18)
         }
         .background(Brand.bg.ignoresSafeArea())
-        .navigationTitle("الثيمات")
+        .appNavTitle("الثيمات")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -11,6 +11,7 @@ struct GateFrame<Content: View>: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var tools: ToolsHost
     @State private var glow = false
+    @State private var shown = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -20,7 +21,7 @@ struct GateFrame<Content: View>: View {
                     if let onBack = onBack {
                         Button(action: onBack) {
                             Image(systemName: "arrow.backward").font(.system(size: 19, weight: .semibold))
-                                .foregroundColor(.white).frame(width: 44, height: 44)
+                                .foregroundColor(Lux.goldLight).frame(width: 44, height: 44)
                         }
                         .accessibilityLabel("رجوع")
                     }
@@ -29,51 +30,70 @@ struct GateFrame<Content: View>: View {
                     ToolsButton()
                 }
                 .frame(height: 44)
+                // the ORIGINAL logo inside a gold ring with a soft glow
                 ZStack {
-                    SwiftUI.Circle().fill(Brand.gold.opacity(glow ? 0.38 : 0.18)).frame(width: 170, height: 170).blur(radius: 26)
-                    RoundedRectangle(cornerRadius: 36, style: .continuous).fill(Color.white).frame(width: 132, height: 132)
-                        .shadow(color: .black.opacity(0.15), radius: 14, x: 0, y: 6)
-                    Image("Logo").resizable().scaledToFit().frame(width: 118, height: 118)
+                    SwiftUI.Circle().fill(Lux.gold.opacity(glow ? 0.34 : 0.14)).frame(width: 186, height: 186).blur(radius: 28)
+                    SwiftUI.Circle().stroke(Lux.goldGradient, lineWidth: 1).frame(width: 162, height: 162).opacity(0.55)
+                    SwiftUI.Circle().fill(Color.white).frame(width: 140, height: 140)
+                        .overlay(SwiftUI.Circle().stroke(Lux.goldGradient, lineWidth: 4))
+                        .shadow(color: Lux.gold.opacity(0.45), radius: 16, x: 0, y: 0)
+                    Image("Logo").resizable().scaledToFit().frame(width: 112, height: 112)
                 }
-                .frame(height: 170)
-                Spacer().frame(height: 6)
+                .frame(height: 190)
+                .scaleEffect(shown ? 1 : 0.86)
+                GoldDivider().padding(.top, 8)
                 Text(model.centerName.isEmpty ? "مركز الصديق لتعليم القرآن الكريم" : model.centerName)
-                    .font(T.headlineSmall).foregroundColor(.white).multilineTextAlignment(.center)
-                Rectangle().fill(Brand.gold).frame(width: 54, height: 3).cornerRadius(2).padding(.top, 10)
+                    .font(Lux.title(30)).foregroundStyle(LinearGradient(colors: [.white, Lux.goldLight], startPoint: .top, endPoint: .bottom))
+                    .multilineTextAlignment(.center).lineSpacing(4).padding(.top, 8)
+                    .shadow(color: .black.opacity(0.35), radius: 6, x: 0, y: 2)
+                GoldDivider(width: 46).padding(.top, 10)
                 OccasionCard().padding(.top, 16)
                 SyncLine().padding(.top, 10)
-                Spacer().frame(height: 24)
+                Spacer().frame(height: 22)
+                // frosted-glass card with a gold hairline
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(T.titleLarge).foregroundColor(Brand.ink)
+                    Text(title).font(T.titleLarge).foregroundColor(.white)
                     Spacer().frame(height: 14)
                     content()
                 }
                 .padding(20)
-                .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Brand.card))
-                .shadow(color: Brand.navy.opacity(0.18), radius: 16, x: 0, y: 8)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 26, style: .continuous).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Lux.greenDeep.opacity(0.45))
+                    }
+                    .environment(\.colorScheme, .dark)
+                )
+                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Lux.goldGradient, lineWidth: 0.8).opacity(0.9))
+                .shadow(color: .black.opacity(0.4), radius: 20, x: 0, y: 10)
+                .offset(y: shown ? 0 : 26)
                 if model.isDemo {
                     Spacer().frame(height: 16)
                     DemoBanner()
                     Text("كلمات السر التجريبية: العامة \(DemoSeed.viewerPassword) • الإدارة \(DemoSeed.adminPassword) • المعلمين \(DemoSeed.teacherPassword)")
-                        .font(T.labelSmall).foregroundColor(Brand.muted).multilineTextAlignment(.center).padding(.top, 8)
+                        .font(T.labelSmall).foregroundColor(.white.opacity(0.7)).multilineTextAlignment(.center).padding(.top, 8)
                 }
                 if showTools {
-                    Spacer().frame(height: 18)
+                    Spacer().frame(height: 22)
+                    // the tools block keeps its own look on its own light panel
                     ToolsHome(open: { tools.show($0) }, showExtras: false)
-                        .padding(.horizontal, -22)   // the tools block keeps its own margins
+                        .padding(.top, 14).padding(.bottom, 18)
+                        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Brand.bg))
+                        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Lux.gold.opacity(0.5), lineWidth: 0.8))
+                        .padding(.horizontal, -10)
                 }
                 Spacer().frame(height: 32)
             }
             .padding(.horizontal, 22)
+            .opacity(shown ? 1 : 0)
         }
         .onAppear { if showTools { ciScrollToTools(proxy) } }
         }
-        .background(
-            LinearGradient(stops: [.init(color: Brand.navy, location: 0), .init(color: Brand.navyDark, location: 0.36), .init(color: Brand.bg, location: 0.66)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-        )
-        .onAppear { withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) { glow = true } }
+        .background(LuxBackground())
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.7)) { shown = true }
+            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) { glow = true }
+        }
     }
 }
 
@@ -133,10 +153,10 @@ struct LoginView: View {
                 GateFrame(title: "أدخل كلمة السر", showTools: true) {
                     PasswordInput(placeholder: "كلمة السر", text: $pass, onSubmit: submit)
                     if let error = error {
-                        Text(error).font(T.bodySmall).foregroundColor(Brand.red).padding(.top, 8).accessibilityIdentifier("loginError")
+                        Text(error).font(T.bodySmall).foregroundColor(Color(hex: 0xFF9C8F)).padding(.top, 8).accessibilityIdentifier("loginError")
                     }
                     Spacer().frame(height: 16)
-                    PrimaryButton(title: "دخول", busy: busy) { submit() }.accessibilityIdentifier("loginButton")
+                    GoldButton(title: "دخول", busy: busy) { submit() }.accessibilityIdentifier("loginButton")
                 }
             }
         }
@@ -168,14 +188,14 @@ struct RoleLoginView: View {
     var body: some View {
         GateFrame(title: kind == .admin ? "دخول الإدارة" : "دخول المعلمين", onBack: onBack) {
             Text(kind == .admin ? "اكتب كلمة سر الإدارة للتحكم في التطبيق" : "اكتب كلمة سرك التي أعطتك إياها الإدارة لإدارة حلقتك")
-                .font(T.bodySmall).foregroundColor(Brand.muted).fixedSize(horizontal: false, vertical: true)
+                .font(T.bodySmall).foregroundColor(.white.opacity(0.78)).fixedSize(horizontal: false, vertical: true)
             Spacer().frame(height: 12)
             PasswordInput(placeholder: kind == .admin ? "كلمة سر الإدارة" : "كلمة سر المعلم", text: $pass, onSubmit: submit)
             if let error = error {
-                Text(error).font(T.bodySmall).foregroundColor(Brand.red).padding(.top, 8).accessibilityIdentifier("loginError")
+                Text(error).font(T.bodySmall).foregroundColor(Color(hex: 0xFF9C8F)).padding(.top, 8).accessibilityIdentifier("loginError")
             }
             Spacer().frame(height: 16)
-            PrimaryButton(title: "دخول", color: kind == .admin ? Brand.navy : Brand.maroon, busy: busy) { submit() }
+            GoldButton(title: "دخول", busy: busy) { submit() }
                 .accessibilityIdentifier("loginButton")
         }
     }

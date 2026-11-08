@@ -51,7 +51,7 @@ struct RootView: View {
         }
         .environmentObject(dialogs)
         .environmentObject(tools)
-        .sheet(isPresented: $tools.open) { ToolsSheet().environmentObject(tools).environmentObject(model) }
+        .fullScreenCover(isPresented: $tools.open) { ToolsSheet().environmentObject(tools).environmentObject(model) }
         .environment(\.layoutDirection, .rightToLeft)
         .environment(\.locale, Locale(identifier: "ar"))
         .preferredColorScheme(theme.active.palette.dark ? .dark : .light)
@@ -155,6 +155,7 @@ struct MainShell: View {
     @StateObject private var router: Router
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var tools: ToolsHost
+    @State private var honor: HonorCard?
 
     init(user: Member, startRoute: String?) {
         self.user = user
@@ -186,6 +187,14 @@ struct MainShell: View {
             }
         }
         .background(Brand.bg.ignoresSafeArea())
+        .overlay {
+            if let h = honor {
+                HonorGreeting(card: h) { Honors.markSeen(h); withAnimation(.easeOut(duration: 0.25)) { honor = nil } }
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
+        }
+        .onChange(of: model.snap.honors.first?.id) { _ in checkHonor() }
+        .task { try? await Task.sleep(nanoseconds: 1_500_000_000); checkHonor() }
         .environmentObject(router)
         .onChange(of: router.stack.count) { _ in updateStatusBar() }
         .onChange(of: router.tab) { _ in
@@ -198,6 +207,12 @@ struct MainShell: View {
                 Task { @MainActor in try? await Task.sleep(nanoseconds: 200_000_000); router.go(r) }
             }
         }
+    }
+
+    /// v3.7: a newly published «المتفوقون» card shows once on this phone.
+    private func checkHonor() {
+        guard honor == nil, let h = Honors.unseen(model.snap) else { return }
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { honor = h }
     }
 
     private func updateStatusBar() {
@@ -237,6 +252,10 @@ struct MainShell: View {
         case .centerSettings: CenterSettingsScreen(user: user)
         case .about: AboutScreen()
         case .tools: ToolsTabScreen()
+        case .adminEvents: AdminEventsScreen(user: user)
+        case .adminEvent(let id): AdminEventScreen(user: user, id: id)
+        case .honors: HonorsScreen(user: user)
+        case .honorPublish: HonorPublishScreen(user: user)
         case .passwords: PasswordsScreen(user: user)
         case .teacherNames: TeacherNamesScreen(user: user)
         case .circleReport(let cid): CircleReportScreen(user: user, circleId: cid)

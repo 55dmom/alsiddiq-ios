@@ -103,6 +103,19 @@ EXTRA="-ciScrollTools YES" shot 49_tools_tab_grid admin tools 10
 EXTRA="-openTool mushaf -ciMushafPage 1" shot 80_mushaf_p1 viewer home 12
 EXTRA="-openTool mushaf -ciMushafPage 3" shot 81_mushaf_p3 viewer home 12
 EXTRA="-openTool mushaf -ciMushafPage 552" shot 82_mushaf_p552 viewer home 12
+# v3.6 the admin's bell (teachers' adds/dismissals), the event card, the teacher's «فصل الطالب»; v3.7 «المتفوقون»
+shot 90_admin_home_bell admin home 8
+shot 91_admin_events admin events 8
+shot 92_admin_event_card admin event/e2 8
+shot 93_teacher_student_edit_dismiss teacher student_edit/s1 8
+shot 94_honors_viewer viewer honors 8
+shot 95_honor_publish admin honor_publish 8
+EXTRA="-ciHonorCard YES" shot 96_honor_greeting viewer home 10
+# his v2 tasbeeh / asma from the «الأدوات» tab, each opened twice (the scene moves to the next video + sound on every opening)
+EXTRA="-openTabTool tasbeeh" shot 98_tasbeeh_v2_open1 admin tools 14
+EXTRA="-openTabTool tasbeeh" shot 98b_tasbeeh_v2_open2 admin tools 14
+EXTRA="-openTabTool asma" shot 99_asma_v2_open1 admin tools 14
+EXTRA="-openTabTool asma" shot 99b_asma_v2_open2 admin tools 14
 # وضع الحفظ ▸ «تسميع»: the start (all hidden) and a simulated state (5 words recited, the 6th missed; Debug flag)
 EXTRA="-openTool hifz -ciHifzMode recite" shot 85_hifz_recite_start viewer home 11
 EXTRA="-openTool hifz -ciHifzMode recite -ciReciteDemo 5" shot 86_hifz_recite_progress viewer home 11

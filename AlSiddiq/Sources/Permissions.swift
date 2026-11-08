@@ -31,6 +31,8 @@ enum Permissions {
     /// Add a student (admin; a teacher into his own circle).
     static func canEditStudents(_ u: Member, _ snap: CenterSnapshot) -> Bool { !editableCircles(u, snap).isEmpty || u.role == .admin }
     static func canEditStudent(_ u: Member, _ s: Student, _ snap: CenterSnapshot) -> Bool { teaches(u, s.circleId, snap) }
+    /// v3.6: «فصل الطالب» — the admin, or a teacher for a student of his own circle.
+    static func canDismissStudent(_ u: Member, _ s: Student, _ snap: CenterSnapshot) -> Bool { teaches(u, s.circleId, snap) }
     static func canRecordFor(_ u: Member, _ s: Student, _ snap: CenterSnapshot) -> Bool { teaches(u, s.circleId, snap) }
     static func canTakeAttendance(_ u: Member, _ circleId: String?, _ snap: CenterSnapshot) -> Bool { teaches(u, circleId, snap) }
 

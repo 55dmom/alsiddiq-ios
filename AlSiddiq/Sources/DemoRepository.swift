@@ -63,6 +63,16 @@ final class DemoRepository: AppRepository {
         var s = all
         s.announcements = all.announcements.filter { Permissions.audienceIncludes($0.audience, user.role) }
         s.notifications = all.notifications.filter { $0.userId == user.id }
+        s.students = all.students.filter { $0.active }
+        s.dismissed = (all.dismissed ?? []) + all.students.filter { !$0.active }
+        s.adminEvents = user.role == .admin ? (all.adminEvents ?? []) : nil
+        #if DEBUG
+        // CI screenshots only: "-ciHonorCard YES" shows a published «المتفوقون» card (and its once-only congratulation)
+        if UserDefaults.standard.bool(forKey: "ciHonorCard"), (s.honorCards ?? []).isEmpty {
+            let top = Honors.rank(s, period: .month).prefix(3)
+            s.honorCards = [HonorCard(id: "hc-demo", students: top.map { Honors.entry($0, s) }, message: "بارك الله فيكم وجعلكم من أهل القرآن، واصلوا على هذا التميّز.", publishedBy: "m-admin", createdAt: Date().addingTimeInterval(-1800))]
+        }
+        #endif
         return s
     }
 
@@ -259,7 +269,12 @@ final class DemoRepository: AppRepository {
             if s.fullName.trimmingCharacters(in: .whitespaces).isEmpty { throw AppError.validation("اكتب اسم الطالب") }
             var saved = s
             if saved.id.isEmpty { saved.id = newId() }
-            if let i = d.students.firstIndex(where: { $0.id == saved.id }) { d.students[i] = saved } else { d.students.append(saved) }
+            if let i = d.students.firstIndex(where: { $0.id == saved.id }) { d.students[i] = saved } else {
+                d.students.append(saved)
+                if u.role == .teacher { // v3.6: as the server's trigger does
+                    d.adminEvents = [DemoSeed.event(newId(), .added, u.fullName, saved, d.circle(saved.circleId), Date())] + (d.adminEvents ?? [])
+                }
+            }
             return saved
         }
     }
@@ -271,6 +286,44 @@ final class DemoRepository: AppRepository {
             d.recitations.removeAll { $0.studentId == id }
             d.attendance.removeAll { $0.studentId == id }
             d.rewards.removeAll { $0.studentId == id }
+        }
+    }
+
+    func dismissStudent(_ id: String) async throws {
+        try mutate { d, u in
+            guard let i = d.students.firstIndex(where: { $0.id == id }) else { return }
+            try require(Permissions.canDismissStudent(u, d.students[i], d))
+            var x = d.students.remove(at: i)
+            x.activeFlag = false; x.dismissedAt = Date(); x.dismissedBy = u.id
+            d.dismissed = (d.dismissed ?? []) + [x]
+            if u.role == .teacher { // the server's trigger logs teachers' actions only
+                d.adminEvents = [DemoSeed.event(newId(), .dismissed, u.fullName, x, d.circle(x.circleId), Date())] + (d.adminEvents ?? [])
+            }
+        }
+    }
+
+    func markEventRead(_ id: String) async throws {
+        try mutate { d, u in
+            try require(u.role == .admin)
+            if let i = d.adminEvents?.firstIndex(where: { $0.id == id }), d.adminEvents?[i].readAt == nil { d.adminEvents?[i].readAt = Date() }
+        }
+    }
+
+    func markAllEventsRead() async throws {
+        try mutate { d, u in
+            try require(u.role == .admin)
+            let now = Date()
+            d.adminEvents = d.adminEvents?.map { var e = $0; if e.readAt == nil { e.readAt = now }; return e }
+        }
+    }
+
+    func publishHonors(_ students: [HonorStudent], message: String?) async throws {
+        try mutate { d, u in
+            try require(u.role == .admin)
+            if students.isEmpty { throw AppError.validation("اختر طالباً واحداً على الأقل") }
+            let m = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let card = HonorCard(id: newId(), students: students, message: (m?.isEmpty ?? true) ? nil : m, publishedBy: u.id, createdAt: Date())
+            d.honorCards = [card] + (d.honorCards ?? [])
         }
     }
 

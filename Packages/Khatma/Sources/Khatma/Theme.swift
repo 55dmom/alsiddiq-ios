@@ -5,12 +5,12 @@ import UIKit
 
 /// Colours for this button only (light / dark follow the system).
 enum KhTheme {
-    static var accent: Color { HostPalette.color("accent") ?? dyn(light: 0xB45309, dark: 0xF59E0B) }
+    static let accent = dyn(light: 0xB45309, dark: 0xF59E0B)
     static let accent2 = dyn(light: 0xC2410C, dark: 0xFB923C)
-    static var bg: Color { HostPalette.color("bg") ?? dyn(light: 0xF3F5F7, dark: 0x0B0E12) }
+    static let bg = dyn(light: 0xF3F5F7, dark: 0x0B0E12)
     static let card = dyn(light: 0xFFFFFF, dark: 0x161A20)
     static let line = dyn(light: 0xE4E8EE, dark: 0x262C35)
-    static var soft: Color { HostPalette.color("soft") ?? dyn(light: 0xF6EAE1, dark: 0x42341B) }
+    static let soft = dyn(light: 0xF6EAE1, dark: 0x42341B)
     static let paper = dyn(light: 0xFBF8F1, dark: 0x0F1210)
     static let gold = dyn(light: 0xB7791F, dark: 0xF2C14E)
     static let good = dyn(light: 0x15803D, dark: 0x4ADE80)

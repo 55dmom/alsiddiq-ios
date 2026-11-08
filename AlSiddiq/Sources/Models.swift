@@ -65,6 +65,11 @@ struct Student: Codable, Identifiable, Equatable, Hashable {
     /// Path of the student's photo in the private storage bucket (nil = no photo; the initial is shown).
     var photoPath: String? = nil
     var createdAt: Date = Date()
+    /// v3.6: false = dismissed (مفصول) by a teacher or the admin. Optional so older saved copies still load (nil = active).
+    var activeFlag: Bool? = nil
+    var dismissedAt: Date? = nil
+    var dismissedBy: String? = nil
+    var active: Bool { activeFlag ?? true }
 }
 
 enum RecordKind: String, Codable, CaseIterable, Identifiable {
@@ -197,6 +202,12 @@ struct CenterSnapshot: Codable, Equatable {
     var announcements: [Announcement] = []
     var notifications: [AppNotification] = []
     var teacherNames: [TeacherName] = []
+    /// v3.6: dismissed students (kept for the admin's event cards; hidden from every list).
+    var dismissed: [Student]? = nil
+    /// v3.6: the admin's bell (teachers' adds and dismissals). Admin only; nil for everyone else.
+    var adminEvents: [AdminEvent]? = nil
+    /// v3.7: published «المتفوقون» cards, newest first.
+    var honorCards: [HonorCard]? = nil
 
     func member(_ id: String?) -> Member? { members.first { $0.id == id } }
     func circle(_ id: String?) -> StudyCircle? { circles.first { $0.id == id } }
@@ -218,6 +229,11 @@ struct CenterSnapshot: Codable, Equatable {
     /// v3.3: the circles this teacher account teaches.
     func circles(of teacherId: String) -> [StudyCircle] { circles.filter { $0.teacherId == teacherId } }
     var unreadCount: Int { notifications.filter { !$0.read }.count }
+    var events: [AdminEvent] { (adminEvents ?? []).sorted { $0.createdAt > $1.createdAt } }
+    var unreadEvents: Int { (adminEvents ?? []).filter { $0.readAt == nil }.count }
+    var honors: [HonorCard] { (honorCards ?? []).sorted { $0.createdAt > $1.createdAt } }
+    /// A student by id, dismissed ones included (for the admin's event cards).
+    func anyStudent(_ id: String?) -> Student? { student(id) ?? (dismissed ?? []).first { $0.id == id } }
 }
 
 enum AppError: LocalizedError {
@@ -236,4 +252,49 @@ enum Recorder {
     static let key = "recordedByName"
     /// v3.3: records carry the signed-in teacher's own name (set by the repository); nothing to pick.
     static var name: String? { nil }
+}
+
+
+/// v3.6: one line in the admin's bell — a teacher registered or dismissed a student (written by the server's trigger).
+struct AdminEvent: Codable, Identifiable, Equatable, Hashable {
+    var id: String
+    var kind: String            // student_added | student_dismissed
+    var actorName: String
+    var studentId: String?
+    var circleId: String?
+    var createdAt: Date
+    var readAt: Date? = nil
+    /// The student as he was at that moment (the server's snapshot).
+    var fullName: String = ""
+    var circleName: String? = nil
+    var teacherName: String? = nil
+    var level: String? = nil
+    var phone: String? = nil
+    var birthYear: Int? = nil
+    var joinedOn: String? = nil
+    var goalJuz: Int? = nil
+    var status: String? = nil
+    var notes: String? = nil
+    var photoPath: String? = nil
+
+    var added: Bool { kind == "student_added" }
+    var line: String { actorName + (added ? " سجّل طالب: " : " فصل الطالب: ") + fullName }
+}
+
+/// v3.7: one published «المتفوقون» card (the admin's «اظهر تفوق الطالب»).
+struct HonorCard: Codable, Identifiable, Equatable, Hashable {
+    var id: String
+    var title: String = "المتفوقون"
+    var students: [HonorStudent] = []
+    var message: String? = nil
+    var publishedBy: String? = nil
+    var createdAt: Date = Date()
+}
+
+struct HonorStudent: Codable, Identifiable, Equatable, Hashable {
+    var id: String
+    var fullName: String
+    var photoPath: String? = nil
+    var circleName: String? = nil
+    var scoreText: String? = nil
 }

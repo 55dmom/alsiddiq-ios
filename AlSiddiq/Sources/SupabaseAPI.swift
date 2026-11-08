@@ -286,7 +286,39 @@ enum Rows {
         return Student(id: id, fullName: s(o, "full_name") ?? "", phone: s(o, "phone") ?? "", birthYear: i(o, "birth_year"),
                        circleId: s(o, "circle_id"), joinedOn: s(o, "joined_on") ?? "", goalJuz: i(o, "goal_juz") ?? 5,
                        status: StudentStatus(rawValue: (s(o, "status") ?? "").uppercased()) ?? .active, notes: s(o, "notes") ?? "",
-                       photoPath: s(o, "photo_path"), createdAt: ts(o["created_at"]))
+                       photoPath: s(o, "photo_path"), createdAt: ts(o["created_at"]),
+                       activeFlag: o["active"] as? Bool, dismissedAt: o["dismissed_at"] is String ? ts(o["dismissed_at"]) : nil,
+                       dismissedBy: s(o, "dismissed_by"))
+    }
+
+    static func adminEvent(_ o: JSON) -> AdminEvent? {
+        guard let id = s(o, "id") else { return nil }
+        let st = (o["student"] as? JSON) ?? [:]
+        return AdminEvent(id: id, kind: s(o, "kind") ?? "", actorName: s(o, "actor_name") ?? "", studentId: s(o, "student_id"),
+                          circleId: s(o, "circle_id"), createdAt: ts(o["created_at"]),
+                          readAt: o["read_at"] is String ? ts(o["read_at"]) : nil,
+                          fullName: s(st, "full_name") ?? "", circleName: s(st, "circle_name"), teacherName: s(st, "teacher_name"),
+                          level: s(st, "level"), phone: s(st, "phone"), birthYear: i(st, "birth_year"), joinedOn: s(st, "joined_on"),
+                          goalJuz: i(st, "goal_juz"), status: s(st, "status"), notes: s(st, "notes"), photoPath: s(st, "photo_path"))
+    }
+
+    static func honorCard(_ o: JSON) -> HonorCard? {
+        guard let id = s(o, "id") else { return nil }
+        let list = (o["students"] as? [JSON]) ?? []
+        let students = list.compactMap { x -> HonorStudent? in
+            guard let sid = s(x, "id") else { return nil }
+            return HonorStudent(id: sid, fullName: s(x, "full_name") ?? "", photoPath: s(x, "photo_path"),
+                                circleName: s(x, "circle_name"), scoreText: s(x, "score_text"))
+        }
+        return HonorCard(id: id, title: s(o, "title") ?? "المتفوقون", students: students, message: s(o, "message"),
+                         publishedBy: s(o, "published_by"), createdAt: ts(o["created_at"]))
+    }
+
+    static func honorCardRow(_ c: HonorCard, _ center: String) -> JSON {
+        ["id": c.id, "center_id": center, "title": c.title, "message": opt(c.message), "published_by": opt(c.publishedBy),
+         "students": c.students.map { h -> JSON in
+             ["id": h.id, "full_name": h.fullName, "photo_path": opt(h.photoPath), "circle_name": opt(h.circleName), "score_text": opt(h.scoreText)]
+         }]
     }
 
     static func studentRow(_ st: Student, _ center: String) -> JSON {

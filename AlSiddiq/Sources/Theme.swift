@@ -37,6 +37,12 @@ enum Brand {
 /// IBM Plex Sans Arabic, the same face as the Android app, registered from the bundle at launch.
 enum AppFont {
     private static var names: [Font.Weight: String] = [:]
+    private static var amiriName: String?
+    /// Amiri (SIL OFL), for the opening screen's centre name.
+    static func amiri(_ size: CGFloat) -> Font {
+        if let n = amiriName { return .custom(n, fixedSize: size) }
+        return .system(size: size, weight: .bold, design: .serif)
+    }
 
     static func register() {
         let files: [(String, Font.Weight)] = [("plex_regular", .regular), ("plex_medium", .medium), ("plex_semibold", .semibold), ("plex_bold", .bold)]
@@ -48,6 +54,12 @@ enum AppFont {
             CTFontManagerRegisterGraphicsFont(font, &error)
             if let ps = font.postScriptName as String? { names[weight] = ps }
         }
+        if let url = Bundle.main.url(forResource: "amiri_regular", withExtension: "ttf"),
+           let provider = CGDataProvider(url: url as CFURL), let font = CGFont(provider) {
+            var error: Unmanaged<CFError>?
+            CTFontManagerRegisterGraphicsFont(font, &error)
+            amiriName = font.postScriptName as String?
+        }
         applyBars()
         if let ps = names[.medium], let ui = UIFont(name: ps, size: 11) {
             UITabBarItem.appearance().setTitleTextAttributes([.font: ui], for: .normal)
@@ -55,11 +67,9 @@ enum AppFont {
     }
 
     /// Navigation bar titles use the same face, in the active theme's ink.
-    static func applyBars() {
-        if let ps = names[.semibold], let ui = UIFont(name: ps, size: 17) {
-            UINavigationBar.appearance().titleTextAttributes = [.font: ui, .foregroundColor: UIColor(Brand.ink)]
-        }
-    }
+    /// The navigation bars are left at the system look: only his tool packages use them, and they must look exactly
+    /// like his own project. The app's own pages inside the tools stack set their title with `appNavTitle`.
+    static func applyBars() {}
 
     static func f(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         if let n = names[weight] ?? names[.regular] { return .custom(n, fixedSize: size) }
@@ -108,4 +118,17 @@ func kindIcon(_ k: RecordKind) -> String {
 
 func attendanceColor(_ s: AttendanceStatus) -> Color {
     switch s { case .present: return Brand.green; case .late: return Brand.orange; case .excused: return Brand.navy; case .absent: return Brand.red }
+}
+
+
+extension View {
+    /// A navigation-bar title in the app's own font (the bars themselves keep the system look for his tools).
+    func appNavTitle(_ title: String) -> some View {
+        navigationTitle(title)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(title).font(AppFont.f(17, .semibold)).foregroundColor(Brand.ink).lineLimit(1)
+                }
+            }
+    }
 }

@@ -42,14 +42,14 @@ enum ToolItem: String, CaseIterable, Identifiable, Hashable {
         case .themes: ThemesScreen()
         case .about: AboutCenterScreen()
         case .developer: ContactDeveloperView()   // his package, unchanged and fixed (not editable)
-        case .mushaf: MushafView()
-        case .hifz: HifzView()
-        case .khatma: KhatmaView()
-        case .prayer: PrayerTimesView()
-        case .adhkar: AdhkarView()
-        case .duas: DuasView()
-        case .tasbeeh: TasbeehView()
-        case .asma: AsmaAllahView()
+        case .mushaf: MushafView().tint(nil)
+        case .hifz: HifzView().tint(nil)
+        case .khatma: KhatmaView().tint(nil)
+        case .prayer: PrayerTimesView().tint(nil)
+        case .adhkar: AdhkarView().tint(nil)
+        case .duas: DuasView().tint(nil)
+        case .tasbeeh: TasbeehView().tint(nil)
+        case .asma: AsmaAllahView().tint(nil)
         }
     }
 }

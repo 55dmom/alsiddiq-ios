@@ -193,6 +193,17 @@ struct StudentEditScreen: View {
                     return saved
                 }) { _ in router.back() }
             }
+            if let ex = existing, Permissions.canDismissStudent(user, ex, snap) {
+                // v3.6: «فصل الطالب» — the row stays on the server; a teacher's dismissal reaches the admin's bell
+                Button {
+                    dialogs.show(ConfirmDialog(title: "فصل الطالب؟",
+                                               message: user.role == .teacher ? "سيُخفى «\(ex.fullName)» من القوائم، ويصل إشعار للإدارة." : "سيُخفى «\(ex.fullName)» من القوائم.",
+                                               confirm: "فصل", destructive: true) {
+                        model.run("فُصل الطالب", { try await model.repo.dismissStudent(ex.id) }) { _ in router.popToRoot() }
+                    })
+                } label: { Text("فصل الطالب").font(T.labelLarge).foregroundColor(Brand.maroon).frame(maxWidth: .infinity).padding(.vertical, 10) }
+                .accessibilityIdentifier("dismissStudent")
+            }
             if let ex = existing, Permissions.canDeleteStudents(user) {
                 Button {
                     dialogs.show(ConfirmDialog(title: "حذف الطالب؟", message: "ستُحذف جميع سجلاته وحضوره ومكافآته نهائياً.", confirm: "حذف", destructive: true) {

@@ -33,13 +33,22 @@ struct DemoStore: Codable {
 
 /// Sample data for design and testing only. Never used once the central database is connected.
 enum DemoSeed {
-    static let version = 6
+    static let version = 7
     /// Demo passwords (sample data only): general view, admin, and each teacher's own (v3.3).
     static let viewerPassword = "111111"
     static let adminPassword = "222222"
     static let teacherPassword = "333333"   // الشيخ عبدالله الحربي (حلقة أبي بكر + حلقة الفجر)
     static let teacher2Password = "444444"  // الأستاذ خالد العمري (حلقة عمر)
     static let teacher3Password = "555555"  // الأستاذ ياسر القحطاني (حلقة البراعم)
+
+    enum EventKind { case added, dismissed }
+    /// v3.6: an admin event as the server's trigger writes it (with the student's snapshot).
+    static func event(_ id: String, _ kind: EventKind, _ actor: String, _ s: Student, _ c: StudyCircle?, _ at: Date, read: Bool = false) -> AdminEvent {
+        AdminEvent(id: id, kind: kind == .added ? "student_added" : "student_dismissed", actorName: actor, studentId: s.id, circleId: s.circleId,
+                   createdAt: at, readAt: read ? at : nil, fullName: s.fullName, circleName: c?.name, teacherName: c?.teacherName,
+                   level: c.map { Fmt.level($0.level) }, phone: s.phone, birthYear: s.birthYear, joinedOn: s.joinedOn, goalJuz: s.goalJuz,
+                   status: s.status.rawValue.lowercased(), notes: s.notes, photoPath: s.photoPath)
+    }
 
     static func create() -> DemoStore {
         var rnd = SeededRandom(7)
@@ -134,9 +143,20 @@ enum DemoSeed {
             Announcement(id: "n1", title: "مسابقة الحفظ الشهرية", body: "تبدأ مسابقة المركز الشهرية يوم الخميس القادم بعد العصر، والجوائز للمراكز الثلاثة الأولى في كل حلقة.", audience: .all, createdBy: admin.id, createdAt: now.addingTimeInterval(-2 * day)),
             Announcement(id: "n3", title: "تحديث خطة المراجعة", body: "اعتماد مراجعة جزء كامل أسبوعياً لطلاب الحلقات المتقدمة.", audience: .teachers, createdBy: admin.id, createdAt: now.addingTimeInterval(-6 * day))
         ]
-        let data = CenterSnapshot(center: CenterInfo(), members: members, circles: circles, students: students,
+        var data = CenterSnapshot(center: CenterInfo(), members: members, circles: circles, students: students,
                                   recitations: recs, attendance: att, rewards: rewards,
                                   announcements: announcements, notifications: [], teacherNames: tnames)
+        // v3.6: two teacher actions waiting in the admin's bell (sample data)
+        let gone = Student(id: "s-gone", fullName: "سالم عبدالرحمن القحطاني", phone: "0501234567", birthYear: 2013, circleId: "c2",
+                           joinedOn: Days.iso(Days.add(today, -120)), goalJuz: 5, activeFlag: false,
+                           dismissedAt: now.addingTimeInterval(-50 * 60), dismissedBy: m2.id)
+        data.dismissed = [gone]
+        if let added = students.first(where: { $0.circleId == "c1" }) {
+            data.adminEvents = [
+                DemoSeed.event("e2", .dismissed, m2.fullName, gone, circles[1], now.addingTimeInterval(-50 * 60)),
+                DemoSeed.event("e1", .added, m1.fullName, added, circles[0], now.addingTimeInterval(-3 * 3600 - 600), read: true)
+            ]
+        }
         let hashes = [admin.id: sha256(adminPassword), viewer.id: sha256(viewerPassword), m1.id: sha256(teacherPassword),
                       m2.id: sha256(teacher2Password), m3.id: sha256(teacher3Password)]
         return DemoStore(data: data, passwordHashes: hashes, currentUserId: nil, seedVersion: version)

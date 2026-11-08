@@ -39,6 +39,8 @@ private struct CloudState: Codable {
     var refusedOps: [PendingOp]? = nil
     var lastSyncAt: Date?
     var seenNotificationIds: [String] = []
+    /// v3.6: admin events already announced by a local notification (nil = none seen yet on this phone).
+    var seenEventIds: [String]? = nil
     /// v3.4: the last fetched «عن المركز» (offline copy).
     var about: AboutInfo? = nil
 }
@@ -283,6 +285,9 @@ final class CloudRepository: AppRepository {
         async let ann = api.selectAll(token: t, table: "announcements", query: "select=*&order=created_at.desc")
         async let notes = api.selectAll(token: t, table: "notifications", query: "select=*&user_id=eq.\(me.id)&order=created_at.desc")
         async let names = api.selectAll(token: t, table: "teacher_names", query: "select=*&order=name")
+        async let honors = api.selectAll(token: t, table: "honor_cards", query: "select=*&order=created_at.desc")
+        let isAdmin = me.role == .admin
+        async let events = adminEventRows(t, isAdmin)
 
         let members = (try await profiles).compactMap { Rows.member($0) }
         if !members.contains(where: { $0.id == me.id }) {
@@ -296,17 +301,24 @@ final class CloudRepository: AppRepository {
         fresh.center = (try await centers).first.map { Rows.center($0) } ?? CenterInfo()
         fresh.members = members
         fresh.circles = (try await circles).compactMap { Rows.circle($0) }
-        fresh.students = (try await students).compactMap { Rows.student($0) }
+        let allStudents = (try await students).compactMap { Rows.student($0) }
+        fresh.students = allStudents.filter { $0.active }
+        fresh.dismissed = allStudents.filter { !$0.active }
         fresh.recitations = (try await recs).compactMap { Rows.recitation($0) }
         fresh.attendance = (try await att).compactMap { Rows.attendance($0) }
         fresh.rewards = (try await rewards).compactMap { Rows.reward($0) }
         fresh.announcements = (try await ann).compactMap { Rows.announcement($0) }
         fresh.notifications = (try await notes).compactMap { Rows.notification($0) }
         fresh.teacherNames = ((try? await names) ?? []).compactMap { Rows.teacherName($0) }
+        fresh.honorCards = ((try? await honors) ?? []).compactMap { Rows.honorCard($0) }
+        let eventRows = (try? await events) ?? []
+        fresh.adminEvents = isAdmin ? eventRows.compactMap { Rows.adminEvent($0) } : nil
 
         // Writes still waiting stay visible on screen until the server has them.
         let merged = st.outbox.isEmpty ? fresh : overlayPending(fresh)
         let newOnes = merged.notifications.filter { !$0.read && !st.seenNotificationIds.contains($0.id) }
+        let seenEvents = Set(st.seenEventIds ?? [])
+        let newEvents = (merged.adminEvents ?? []).filter { $0.readAt == nil && !seenEvents.contains($0.id) }
         st.cache = merged
         st.me = members.first { $0.id == me.id } ?? me
         st.lastSyncAt = Date()
@@ -314,7 +326,20 @@ final class CloudRepository: AppRepository {
             st.seenNotificationIds = Array((newOnes.map { $0.id } + st.seenNotificationIds).prefix(500))
             if UIApplication.shared.applicationState != .active { Notifier.post(newOnes) }
         }
+        if !newEvents.isEmpty {
+            // the first sync after sign-in only remembers what was already waiting (no burst of old events)
+            if st.seenEventIds != nil { Notifier.postEvents(newEvents) }
+            st.seenEventIds = Array((newEvents.map { $0.id } + (st.seenEventIds ?? [])).prefix(500))
+        } else if st.seenEventIds == nil && isAdmin {
+            st.seenEventIds = []
+        }
         save(); publish()
+    }
+
+    /// v3.6: the admin's bell rows (only the admin may read them; nobody else asks).
+    private func adminEventRows(_ t: String, _ isAdmin: Bool) async throws -> [JSON] {
+        guard isAdmin else { return [] }
+        return try await api.selectAll(token: t, table: "admin_events", query: "select=*&order=created_at.desc")
     }
 
     private func overlayPending(_ fresh: CenterSnapshot) -> CenterSnapshot {
@@ -330,6 +355,22 @@ final class CloudRepository: AppRepository {
         out.rewards += old.rewards.filter { ids.contains($0.id) && !fw.contains($0.id) }
         out.students += old.students.filter { ids.contains($0.id) && !fs.contains($0.id) }
         out.circles += old.circles.filter { ids.contains($0.id) && !fc.contains($0.id) }
+        // v3.6: a dismissal still on the phone keeps the student out of the lists; queued read marks stay read
+        let dismissing = Set(st.outbox.filter { $0.table == "students" && $0.type == "patch" && $0.body.contains("\"active\":false") }
+            .compactMap { $0.filter.components(separatedBy: "&").first?.replacingOccurrences(of: "id=eq.", with: "") })
+        if !dismissing.isEmpty {
+            let moved = out.students.filter { dismissing.contains($0.id) }.map { s -> Student in var x = s; x.activeFlag = false; return x }
+            out.students.removeAll { dismissing.contains($0.id) }
+            out.dismissed = (out.dismissed ?? []) + moved
+        }
+        if st.outbox.contains(where: { $0.table == "admin_events" }) {
+            let oldRead = Set((old.adminEvents ?? []).filter { $0.readAt != nil }.map { $0.id })
+            out.adminEvents = out.adminEvents?.map { var e = $0; if e.readAt == nil && oldRead.contains(e.id) { e.readAt = Date() }; return e }
+        }
+        if st.outbox.contains(where: { $0.table == "honor_cards" }) {
+            let have = Set((out.honorCards ?? []).map { $0.id })
+            out.honorCards = (old.honorCards ?? []).filter { !have.contains($0.id) } + (out.honorCards ?? [])
+        }
         return out
     }
 
@@ -659,6 +700,50 @@ final class CloudRepository: AppRepository {
         }
     }
 
+    func dismissStudent(_ id: String) async throws {
+        let u = try me()
+        guard let s = st.cache.student(id) else { return }
+        try require(Permissions.canDismissStudent(u, s, st.cache))
+        let now = Date()
+        let body = json(["active": false, "dismissed_at": Rows.iso(now), "dismissed_by": u.id, "updated_at": Rows.iso(now)])
+        _ = try await write(PendingOp(type: "patch", table: "students", body: body, filter: "id=eq.\(id)&active=eq.true"), ()) { d in
+            if let i = d.students.firstIndex(where: { $0.id == id }) {
+                var x = d.students.remove(at: i)
+                x.activeFlag = false; x.dismissedAt = now; x.dismissedBy = u.id
+                d.dismissed = (d.dismissed ?? []) + [x]
+            }
+        }
+    }
+
+    func markEventRead(_ id: String) async throws {
+        try require(try me().role == .admin)
+        let body = json(["read_at": Rows.iso(Date())])
+        _ = try await write(PendingOp(type: "patch", table: "admin_events", body: body, filter: "id=eq.\(id)&read_at=is.null"), ()) { d in
+            if let i = d.adminEvents?.firstIndex(where: { $0.id == id }) { d.adminEvents?[i].readAt = Date() }
+        }
+    }
+
+    func markAllEventsRead() async throws {
+        try require(try me().role == .admin)
+        let body = json(["read_at": Rows.iso(Date())])
+        _ = try await write(PendingOp(type: "patch", table: "admin_events", body: body, filter: "read_at=is.null"), ()) { d in
+            let now = Date()
+            d.adminEvents = d.adminEvents?.map { var e = $0; if e.readAt == nil { e.readAt = now }; return e }
+        }
+    }
+
+    func publishHonors(_ students: [HonorStudent], message: String?) async throws {
+        let u = try me()
+        try require(u.role == .admin)
+        if students.isEmpty { throw AppError.validation("اختر طالباً واحداً على الأقل") }
+        let m = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let card = HonorCard(id: newId(), students: students, message: (m?.isEmpty ?? true) ? nil : m, publishedBy: u.id, createdAt: Date())
+        let row = json(Rows.honorCardRow(card, try center()))
+        _ = try await write(PendingOp(type: "upsert", table: "honor_cards", body: row, ignoreDuplicates: true), ()) { d in
+            d.honorCards = [card] + (d.honorCards ?? [])
+        }
+    }
+
     // MARK: Teaching
     func logRecitation(_ r: Recitation) async throws -> Recitation {
         let u = try me()
@@ -792,6 +877,17 @@ final class CloudRepository: AppRepository {
 enum Notifier {
     static func requestPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    /// v3.6: the admin's bell, as a local notification when a sync brings new teacher actions (no push: the app must sync).
+    static func postEvents(_ list: [AdminEvent]) {
+        for e in list.prefix(5) {
+            let c = UNMutableNotificationContent()
+            c.title = e.added ? "طالب جديد" : "فصل طالب"
+            c.body = e.line + ((e.circleName ?? "").isEmpty ? "" : " — حلقة " + (e.circleName ?? ""))
+            c.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "ev-" + e.id, content: c, trigger: nil))
+        }
     }
 
     static func post(_ list: [AppNotification]) {

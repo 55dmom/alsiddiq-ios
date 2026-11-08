@@ -67,6 +67,13 @@ protocol AppRepository: AnyObject {
     func deleteCircle(_ id: String) async throws
     func saveStudent(_ s: Student) async throws -> Student
     func deleteStudent(_ id: String) async throws
+    /// v3.6: «فصل الطالب» — a teacher in his own circle, or the admin. The row stays (active = false); the server tells the admin.
+    func dismissStudent(_ id: String) async throws
+    /// v3.6: the admin's bell.
+    func markEventRead(_ id: String) async throws
+    func markAllEventsRead() async throws
+    /// v3.7: «اظهر تفوق الطالب» (admin): publish a «المتفوقون» card.
+    func publishHonors(_ students: [HonorStudent], message: String?) async throws
     /// Set (jpeg) or remove (nil) the student's photo.
     func setStudentPhoto(studentId: String, jpeg: Data?) async throws
     /// The student's photo, cached on the phone.

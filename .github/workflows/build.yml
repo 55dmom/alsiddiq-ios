@@ -219,10 +219,14 @@ jobs:
               print(name, len(have2), "screens")
           small_sheet(["40_admin_home_bar","41_teacher_home_bar","42_viewer_home_bar","43_tools_tab_admin","46_tools_tab_tool_open",
                        "44_tools_tab_teacher","45_tools_tab_viewer","47_tools_tab_night","49_tools_tab_grid","00_password","48_password_tools_below","74_67_tools_tab",
-                       "50_se_admin_home","51_se_teacher_home","52_se_viewer_home","53_se_tools_tab","55_se_tools_tab_grid","56_se_password_tools"], "ios_tabs_fix.jpg")
+                       "50_se_admin_home","51_se_teacher_home","52_se_viewer_home","53_se_tools_tab","55_se_tools_tab_grid","56_se_password_tools",
+                       "03_role_login_admin","07_admin_home","12_teacher_home","01_viewer_home",
+                       "98_tasbeeh_v2_open1","98b_tasbeeh_v2_open2","99_asma_v2_open1","99b_asma_v2_open2"], "ios_tabs_fix.jpg")
           small_sheet(["60_se_mushaf_p1","61_se_mushaf_p3","62_se_mushaf_p552","80_mushaf_p1","81_mushaf_p3","82_mushaf_p552",
                        "70_67_mushaf_p1","71_67_mushaf_p3","72_67_mushaf_p552","73_67_mushaf_p3_bigger",
                        "85_hifz_recite_start","86_hifz_recite_progress","63_se_hifz_recite"], "ios_mushaf_hifz.jpg", cols2=5)
+          small_sheet(["90_admin_home_bell","91_admin_events","92_admin_event_card","93_teacher_student_edit_dismiss",
+                       "94_honors_viewer","95_honor_publish","96_honor_greeting"], "ios_students_honors.jpg", cols2=4)
           PY
           ls -la art/screenshots | tail -5
       - name: Publish release
