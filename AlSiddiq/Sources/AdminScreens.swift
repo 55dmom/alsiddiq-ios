@@ -161,7 +161,6 @@ struct ViewerSettingsScreen: View {
                 router.go(.roleLogin(.teacher))
             }
             SectionHeader(title: "عام")
-            MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
@@ -197,8 +196,9 @@ struct MoreScreen: View {
             MenuRow(title: "الإعلانات", sub: "\(snap.announcements.count) إعلان", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "المكافآت", sub: "النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "المتفوقون", sub: "اظهر تفوق الطالب", icon: "rosette", tint: Brand.gold) { router.go(.honors) }
+            MenuRow(title: "حضور وغياب المعلمين", sub: "حاضر / غائب لكل معلم، والسجل", icon: "person.crop.circle.badge.checkmark") { router.go(.teacherAttendance) }
+            MenuRow(title: "الميزانية", sub: "اشتراكات الطلاب، الصرف، والمتبقي", icon: "banknote", tint: Brand.green) { router.go(.budget) }
             MenuRow(title: "بيانات المركز", sub: snap.center.name, icon: "building.columns") { router.go(.centerSettings) }
-            MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
             MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
@@ -223,7 +223,6 @@ struct TeacherMoreScreen: View {
             MenuRow(title: "المكافآت", sub: "منح النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "التقارير", sub: "إحصائيات الحفظ والحضور", icon: "chart.bar.xaxis") { router.go(.reports) }
             MenuRow(title: "الإعلانات", sub: "إعلانات المركز", icon: "megaphone") { router.go(.announcements) }
-            MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
             MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }

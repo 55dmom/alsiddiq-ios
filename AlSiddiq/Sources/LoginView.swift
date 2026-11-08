@@ -26,8 +26,9 @@ struct GateFrame<Content: View>: View {
                         .accessibilityLabel("رجوع")
                     }
                     Spacer()
+                    // no «الأدوات» button up here: the tools are below the card (his words, Nov 8)
                     AboutButtonSmall()
-                    ToolsButton()
+                    DeveloperButtonSmall()
                 }
                 .frame(height: 44)
                 // the ORIGINAL logo inside a gold ring with a soft glow

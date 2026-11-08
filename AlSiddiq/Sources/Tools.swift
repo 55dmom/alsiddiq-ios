@@ -87,7 +87,26 @@ struct ToolsButton: View {
     }
 }
 
-/// The small «عن المركز» button beside «الأدوات» on the opening and password screens (no password needed).
+/// The small «المطور» button right beside «عن المركز» on the opening and password screens: opens «تواصل مع المطوّر».
+struct DeveloperButtonSmall: View {
+    var light = true
+    @EnvironmentObject var tools: ToolsHost
+    var body: some View {
+        Button { tools.show(.developer) } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "paperplane.fill").font(.system(size: 14, weight: .semibold))
+                Text("المطور").font(T.labelLarge)
+            }
+            .foregroundColor(light ? .white : Brand.navy)
+            .padding(.horizontal, 12).frame(height: 36)
+            .background(Capsule().fill(light ? Color.white.opacity(0.14) : Brand.navySoft))
+            .overlay(Capsule().stroke(Brand.gold.opacity(0.7), lineWidth: 1))
+        }
+        .accessibilityIdentifier("developerButton")
+    }
+}
+
+/// The small «عن المركز» button on the opening and password screens (no password needed), «المطور» beside it.
 struct AboutButtonSmall: View {
     var light = true
     @EnvironmentObject var tools: ToolsHost
@@ -161,11 +180,7 @@ struct ToolsMenuList: View {
                 }
                 .padding(.bottom, 4)
                 ForEach(ToolItem.tools) { item in ToolRow(item: item) }
-                SectionLabel(text: "المظهر").padding(.top, 6)
-                ToolRow(item: .themes)
-                SectionLabel(text: "المركز").padding(.top, 6)
-                ToolRow(item: .about)
-                ToolRow(item: .developer)
+                // «الثيمات»، «عن المركز» and «تواصل مع المطوّر» live in الإعدادات only (his words, Nov 8)
             }
             .padding(18)
         }
@@ -178,7 +193,8 @@ struct ToolsMenuList: View {
 /// `open` nil: each tile pushes on the surrounding NavigationStack; otherwise the tile calls it.
 struct ToolsHome: View {
     var open: ((ToolItem) -> Void)? = nil
-    var showExtras = true
+    /// «الثيمات»، «عن المركز» and «تواصل مع المطوّر» are in الإعدادات only (his words, Nov 8), so off everywhere now.
+    var showExtras = false
     private let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

@@ -288,6 +288,8 @@ final class CloudRepository: AppRepository {
         async let honors = api.selectAll(token: t, table: "honor_cards", query: "select=*&order=created_at.desc")
         let isAdmin = me.role == .admin
         async let events = adminEventRows(t, isAdmin)
+        async let tmarks = adminRows(t, isAdmin, "teacher_attendance", "select=*&order=day.desc")
+        async let budgetRows = adminRows(t, isAdmin, "budget_entries", "select=*&order=day.desc")
 
         let members = (try await profiles).compactMap { Rows.member($0) }
         if !members.contains(where: { $0.id == me.id }) {
@@ -313,6 +315,9 @@ final class CloudRepository: AppRepository {
         fresh.honorCards = ((try? await honors) ?? []).compactMap { Rows.honorCard($0) }
         let eventRows = (try? await events) ?? []
         fresh.adminEvents = isAdmin ? eventRows.compactMap { Rows.adminEvent($0) } : nil
+        // v3.8: admin only (a server without the tables yet gives empty lists)
+        fresh.teacherMarks = isAdmin ? ((try? await tmarks) ?? []).compactMap { Rows.teacherMark($0) } : nil
+        fresh.budget = isAdmin ? ((try? await budgetRows) ?? []).compactMap { Rows.budgetEntry($0) } : nil
 
         // Writes still waiting stay visible on screen until the server has them.
         let merged = st.outbox.isEmpty ? fresh : overlayPending(fresh)
@@ -342,6 +347,12 @@ final class CloudRepository: AppRepository {
         return try await api.selectAll(token: t, table: "admin_events", query: "select=*&order=created_at.desc")
     }
 
+    /// v3.8: rows only the admin may read (nobody else asks).
+    private func adminRows(_ t: String, _ isAdmin: Bool, _ table: String, _ query: String) async throws -> [JSON] {
+        guard isAdmin else { return [] }
+        return try await api.selectAll(token: t, table: table, query: query)
+    }
+
     private func overlayPending(_ fresh: CenterSnapshot) -> CenterSnapshot {
         var ids = Set<String>()
         for op in st.outbox {
@@ -367,6 +378,9 @@ final class CloudRepository: AppRepository {
             let oldRead = Set((old.adminEvents ?? []).filter { $0.readAt != nil }.map { $0.id })
             out.adminEvents = out.adminEvents?.map { var e = $0; if e.readAt == nil && oldRead.contains(e.id) { e.readAt = Date() }; return e }
         }
+        // v3.8: while a teacher-attendance or budget write waits, the phone's own list stays on screen
+        if st.outbox.contains(where: { $0.table == "teacher_attendance" }), out.teacherMarks != nil { out.teacherMarks = old.teacherMarks ?? out.teacherMarks }
+        if st.outbox.contains(where: { $0.table == "budget_entries" }), out.budget != nil { out.budget = old.budget ?? out.budget }
         if st.outbox.contains(where: { $0.table == "honor_cards" }) {
             let have = Set((out.honorCards ?? []).map { $0.id })
             out.honorCards = (old.honorCards ?? []).filter { !have.contains($0.id) } + (out.honorCards ?? [])
@@ -741,6 +755,53 @@ final class CloudRepository: AppRepository {
         let row = json(Rows.honorCardRow(card, try center()))
         _ = try await write(PendingOp(type: "upsert", table: "honor_cards", body: row, ignoreDuplicates: true), ()) { d in
             d.honorCards = [card] + (d.honorCards ?? [])
+        }
+    }
+
+    // MARK: v3.8 admin: teacher attendance, budget
+    func saveTeacherAttendance(day: String, marks: [String: TeacherMarkStatus]) async throws -> Int {
+        let u = try me()
+        try require(u.role == .admin)
+        if marks.isEmpty { throw AppError.validation("اختر حاضر أو غائب لمعلم واحد على الأقل") }
+        let c = try center()
+        let rows: [JSON] = marks.map { tid, s in
+            ["center_id": c, "teacher_profile_id": tid, "day": day, "status": s.rawValue, "marked_by": u.id]
+        }
+        let local = marks.map { TeacherMark(id: newId(), teacherId: $0.key, day: day, status: $0.value, markedBy: u.id) }
+        return try await write(PendingOp(type: "upsert", table: "teacher_attendance", body: json(rows), onConflict: "teacher_profile_id,day"), marks.count) { snap in
+            var list = snap.teacherMarks ?? []
+            list.removeAll { $0.day == day && marks.keys.contains($0.teacherId) }
+            snap.teacherMarks = local + list
+        }
+    }
+
+    func saveBudgetEntry(_ e: BudgetEntry) async throws -> BudgetEntry {
+        let u = try me()
+        try require(u.role == .admin)
+        if e.amount <= 0 { throw AppError.validation("اكتب المبلغ") }
+        let note = e.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if e.kind == .expense && (note ?? "").isEmpty { throw AppError.validation("اكتب ملاحظة لعملية الصرف") }
+        var saved = e
+        saved.note = (note ?? "").isEmpty ? nil : note
+        if saved.kind == .expense { saved.studentId = nil }
+        let fields: JSON = ["kind": saved.kind.rawValue, "amount": saved.amount, "day": saved.day,
+                            "student_id": opt(saved.studentId), "note": opt(saved.note)]
+        if saved.id.isEmpty {
+            saved.id = newId(); saved.createdBy = u.id; saved.createdAt = Date()
+            var row = fields; row["id"] = saved.id; row["center_id"] = try center(); row["created_by"] = u.id
+            return try await write(PendingOp(type: "upsert", table: "budget_entries", body: json(row), ignoreDuplicates: true), saved) { d in
+                d.budget = [saved] + (d.budget ?? [])
+            }
+        }
+        return try await write(PendingOp(type: "patch", table: "budget_entries", body: json(fields), filter: "id=eq.\(saved.id)"), saved) { d in
+            if let i = d.budget?.firstIndex(where: { $0.id == saved.id }) { d.budget?[i] = saved }
+        }
+    }
+
+    func deleteBudgetEntry(_ id: String) async throws {
+        try require(try me().role == .admin)
+        _ = try await write(PendingOp(type: "delete", table: "budget_entries", filter: "id=eq.\(id)"), ()) { d in
+            d.budget?.removeAll { $0.id == id }
         }
     }
 

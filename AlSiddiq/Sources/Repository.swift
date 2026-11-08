@@ -74,6 +74,11 @@ protocol AppRepository: AnyObject {
     func markAllEventsRead() async throws
     /// v3.7: «اظهر تفوق الطالب» (admin): publish a «المتفوقون» card.
     func publishHonors(_ students: [HonorStudent], message: String?) async throws
+    /// v3.8 (admin only): «حضور وغياب المعلمين» — one mark per teacher for the day (teacher id → حاضر/غائب).
+    func saveTeacherAttendance(day: String, marks: [String: TeacherMarkStatus]) async throws -> Int
+    /// v3.8 (admin only): «الميزانية» — add (empty id) or edit one income/expense entry; delete one.
+    func saveBudgetEntry(_ e: BudgetEntry) async throws -> BudgetEntry
+    func deleteBudgetEntry(_ id: String) async throws
     /// Set (jpeg) or remove (nil) the student's photo.
     func setStudentPhoto(studentId: String, jpeg: Data?) async throws
     /// The student's photo, cached on the phone.

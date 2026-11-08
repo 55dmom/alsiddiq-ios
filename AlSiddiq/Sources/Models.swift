@@ -208,6 +208,9 @@ struct CenterSnapshot: Codable, Equatable {
     var adminEvents: [AdminEvent]? = nil
     /// v3.7: published «المتفوقون» cards, newest first.
     var honorCards: [HonorCard]? = nil
+    /// v3.8 (admin only; nil for everyone else): «حضور وغياب المعلمين» and «الميزانية».
+    var teacherMarks: [TeacherMark]? = nil
+    var budget: [BudgetEntry]? = nil
 
     func member(_ id: String?) -> Member? { members.first { $0.id == id } }
     func circle(_ id: String?) -> StudyCircle? { circles.first { $0.id == id } }

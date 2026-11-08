@@ -256,6 +256,10 @@ struct MainShell: View {
         case .adminEvent(let id): AdminEventScreen(user: user, id: id)
         case .honors: HonorsScreen(user: user)
         case .honorPublish: HonorPublishScreen(user: user)
+        case .teacherAttendance:
+            if user.role == .admin { TeacherAttendanceScreen(user: user) } else { EmptyState(title: "للإدارة فقط", message: "هذه الصفحة تظهر للإدارة فقط") }
+        case .budget:
+            if user.role == .admin { BudgetScreen(user: user) } else { EmptyState(title: "للإدارة فقط", message: "هذه الصفحة تظهر للإدارة فقط") }
         case .passwords: PasswordsScreen(user: user)
         case .teacherNames: TeacherNamesScreen(user: user)
         case .circleReport(let cid): CircleReportScreen(user: user, circleId: cid)

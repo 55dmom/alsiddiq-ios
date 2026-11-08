@@ -1,5 +1,6 @@
 #!/bin/bash
-# Short pass: the opening (password) screen on an iPhone SE and a 6.7" phone, plus one SE home header (the round logo).
+# Short pass: the opening (password) screen on an iPhone SE and a 6.7" phone, plus a few SE screens of the v3.8 changes
+# (home header, settings, admin page, tools tab, teacher attendance, budget).
 # Sample data on the phone only. The full passes stay in ci/shots.sh and ci/shots_sizes.sh.
 MAIN="$1"
 BID=com.alsiddiq.app
@@ -41,9 +42,15 @@ shot() { # name who route wait
 if up "^iPhone SE \\(3rd|^iPhone SE|^iPhone 13 mini|^iPhone 12 mini|^iPhone 16e|^iPhone 17e" "iPhone SE"; then
   shot L1_se_password none home 11
   shot L3_se_admin_home_header admin home 10
+  shot L4_se_viewer_settings viewer viewer_settings 8
+  shot L5_se_admin_page admin more 8
+  EXTRA="-ciScrollTools NO" shot L6_se_tools_tab viewer tools 9
+  EXTRA="-ciV38Demo YES" shot L7_se_teacher_attendance admin teacher_attendance 9
+  EXTRA="-ciV38Demo YES" shot L8_se_budget admin budget 9
 fi
 if up "^iPhone 1[4-9] Plus$|^iPhone 1[4-9] Pro Max$" "6.7in"; then
   xcrun simctl list devices | grep "CI 6.7in" > shots/device_67.txt || true
-  shot L2_67_password none home 11
+  shot L0_67_warmup none home 20   # the first launch on a fresh device is slow (run 25 caught the springboard)
+  shot L2_67_password none home 12
 fi
 ls -la shots | tail -8

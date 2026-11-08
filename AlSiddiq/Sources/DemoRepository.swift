@@ -66,6 +66,32 @@ final class DemoRepository: AppRepository {
         s.students = all.students.filter { $0.active }
         s.dismissed = (all.dismissed ?? []) + all.students.filter { !$0.active }
         s.adminEvents = user.role == .admin ? (all.adminEvents ?? []) : nil
+        // v3.8: admin only
+        s.teacherMarks = user.role == .admin ? (all.teacherMarks ?? []) : nil
+        s.budget = user.role == .admin ? (all.budget ?? []) : nil
+        #if DEBUG
+        // CI screenshots only: "-ciV38Demo YES" fills a little sample teacher attendance and budget
+        if user.role == .admin, UserDefaults.standard.bool(forKey: "ciV38Demo") {
+            if (s.teacherMarks ?? []).isEmpty {
+                let ts = s.teachers()
+                var xs: [TeacherMark] = []
+                for back in 1...6 {
+                    let day = Days.iso(Days.add(Days.today, -back))
+                    for (k, t) in ts.enumerated() { xs.append(TeacherMark(id: "tm-\(back)-\(k)", teacherId: t.id, day: day, status: (back + k) % 4 == 0 ? .absent : .present)) }
+                }
+                s.teacherMarks = xs
+            }
+            if (s.budget ?? []).isEmpty {
+                let st = s.students.prefix(3)
+                var xs: [BudgetEntry] = st.enumerated().map { k, x in
+                    BudgetEntry(id: "be-i\(k)", kind: .income, amount: Double(s.circle(x.circleId)?.feeYer ?? 5000), day: Days.iso(Days.add(Days.today, -k)), studentId: x.id, createdAt: Date().addingTimeInterval(Double(-k * 3600)))
+                }
+                xs.append(BudgetEntry(id: "be-e1", kind: .expense, amount: 3500, day: Days.iso(Days.today), note: "مصاحف وأقلام للحلقات", createdAt: Date()))
+                xs.append(BudgetEntry(id: "be-e2", kind: .expense, amount: 2000, day: Days.iso(Days.add(Days.today, -2)), note: "فاتورة الكهرباء", createdAt: Date().addingTimeInterval(-7200)))
+                s.budget = xs
+            }
+        }
+        #endif
         #if DEBUG
         // CI screenshots only: "-ciHonorCard YES" shows a published «المتفوقون» card (and its once-only congratulation)
         if UserDefaults.standard.bool(forKey: "ciHonorCard"), (s.honorCards ?? []).isEmpty {
@@ -324,6 +350,46 @@ final class DemoRepository: AppRepository {
             let m = message?.trimmingCharacters(in: .whitespacesAndNewlines)
             let card = HonorCard(id: newId(), students: students, message: (m?.isEmpty ?? true) ? nil : m, publishedBy: u.id, createdAt: Date())
             d.honorCards = [card] + (d.honorCards ?? [])
+        }
+    }
+
+    // MARK: v3.8 admin: teacher attendance, budget
+    func saveTeacherAttendance(day: String, marks: [String: TeacherMarkStatus]) async throws -> Int {
+        try mutate { d, u in
+            try require(u.role == .admin)
+            if marks.isEmpty { throw AppError.validation("اختر حاضر أو غائب لمعلم واحد على الأقل") }
+            var list = d.teacherMarks ?? []
+            list.removeAll { $0.day == day && marks.keys.contains($0.teacherId) }
+            d.teacherMarks = marks.map { TeacherMark(id: newId(), teacherId: $0.key, day: day, status: $0.value, markedBy: u.id) } + list
+            return marks.count
+        }
+    }
+
+    func saveBudgetEntry(_ e: BudgetEntry) async throws -> BudgetEntry {
+        try mutate { d, u in
+            try require(u.role == .admin)
+            if e.amount <= 0 { throw AppError.validation("اكتب المبلغ") }
+            let note = e.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if e.kind == .expense && (note ?? "").isEmpty { throw AppError.validation("اكتب ملاحظة لعملية الصرف") }
+            var saved = e
+            saved.note = (note ?? "").isEmpty ? nil : note
+            if saved.kind == .expense { saved.studentId = nil }
+            var list = d.budget ?? []
+            if saved.id.isEmpty {
+                saved.id = newId(); saved.createdBy = u.id; saved.createdAt = Date()
+                list.insert(saved, at: 0)
+            } else if let i = list.firstIndex(where: { $0.id == saved.id }) {
+                list[i] = saved
+            }
+            d.budget = list
+            return saved
+        }
+    }
+
+    func deleteBudgetEntry(_ id: String) async throws {
+        try mutate { d, u in
+            try require(u.role == .admin)
+            d.budget?.removeAll { $0.id == id }
         }
     }
 

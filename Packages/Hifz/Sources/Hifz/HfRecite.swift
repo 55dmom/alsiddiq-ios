@@ -72,6 +72,9 @@ final class HfReciter: ObservableObject {
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))
     private var rangeKey = ""
     private var startedAt = Date()
+    /// which recognition task is current; callbacks of older tasks are ignored
+    private var gen = 0
+    private var quickFails = 0
 
     /// Build the expected words for a range (each ayah's own words, in order). Keeps progress if the range is the same.
     func load(surah: Int, ayahs: [Int], words: (Int) -> [String]) {
@@ -131,39 +134,22 @@ final class HfReciter: ObservableObject {
         }
         denied = false
         do {
-            let s = AVAudioSession.sharedInstance()
-            try s.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try s.setActive(true, options: .notifyOthersOnDeactivation)
-            let req = SFSpeechAudioBufferRecognitionRequest()
-            req.shouldReportPartialResults = true
-            if rec.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
-            request = req
-            let input = engine.inputNode
-            input.removeTap(onBus: 0)
-            input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak self] buf, _ in
-                self?.request?.append(buf)
-            }
-            engine.prepare()
-            try engine.start()
-            listening = true
-            base = pos
-            startedAt = Date()
-            task = rec.recognitionTask(with: req) { [weak self] result, error in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    if let r = result { self.heard(r.bestTranscription.formattedString) }
-                    if error != nil || (result?.isFinal ?? false) {
-                        // one recognition session ended (pause or time limit): keep going from where he is
-                        let wasListening = self.listening
-                        let quick = error != nil && Date().timeIntervalSince(self.startedAt) < 1.5
-                        self.endSession()
-                        if quick {
-                            self.stop()
-                            self.message = "ما وصلني صوت من المايك. جرّب مرة ثانية."
-                        } else if wasListening && !self.done { self.begin() }
-                    }
+            if !engine.isRunning {
+                let s = AVAudioSession.sharedInstance()
+                try s.setCategory(.record, mode: .measurement, options: .duckOthers)
+                try s.setActive(true, options: .notifyOthersOnDeactivation)
+                let input = engine.inputNode
+                input.removeTap(onBus: 0)
+                // the mic stays open for the whole «تسميع»; each buffer goes to the CURRENT recognition request
+                input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak self] buf, _ in
+                    self?.request?.append(buf)
                 }
+                engine.prepare()
+                try engine.start()
             }
+            listening = true
+            quickFails = 0
+            newRecognition(rec)
         } catch {
             message = "ما قدرت أشغّل المايك."
             endSession()
@@ -171,7 +157,47 @@ final class HfReciter: ObservableObject {
         }
     }
 
+    /// One recognition task. iOS ends a task on a pause, on its time limit or with an error; while «تسميع» is on
+    /// (until he taps stop or the passage is done) a new task starts at once on the same open mic.
+    private func newRecognition(_ rec: SFSpeechRecognizer) {
+        gen += 1
+        let g = gen
+        request?.endAudio()
+        task?.cancel()
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        if rec.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+        request = req
+        base = pos
+        startedAt = Date()
+        task = rec.recognitionTask(with: req) { [weak self] result, error in
+            DispatchQueue.main.async {
+                // a task we already replaced or stopped (its cancel also lands here): ignore it
+                guard let self = self, g == self.gen else { return }
+                if let r = result {
+                    self.heard(r.bestTranscription.formattedString)
+                    if !r.bestTranscription.formattedString.isEmpty { self.quickFails = 0 }
+                }
+                guard error != nil || (result?.isFinal ?? false) else { return }
+                guard self.listening, !self.done else { return }
+                // only a mic that gives nothing at all, task after task, ends it on its own
+                let quick = error != nil && Date().timeIntervalSince(self.startedAt) < 1.0
+                self.quickFails = quick ? self.quickFails + 1 : 0
+                if self.quickFails >= 8 {
+                    self.stop()
+                    self.message = "ما وصلني صوت من المايك. جرّب مرة ثانية."
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + (quick ? 0.4 : 0.05)) {
+                    guard g == self.gen, self.listening, !self.done, let rec = self.recognizer else { return }
+                    self.newRecognition(rec)
+                }
+            }
+        }
+    }
+
     private func endSession() {
+        gen += 1   // any callback still in flight belongs to an ended task
         if engine.isRunning { engine.stop() }
         engine.inputNode.removeTap(onBus: 0)
         request?.endAudio()
