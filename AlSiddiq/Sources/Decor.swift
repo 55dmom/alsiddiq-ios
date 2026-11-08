@@ -37,41 +37,23 @@ struct IslamicPattern: View {
     }
 }
 
-/// A faint mosque skyline (domes and minarets), a plain silhouette.
-struct MosqueSilhouette: Shape {
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let w = r.width, h = r.height, b = r.maxY
-        func minaret(_ x: CGFloat, _ top: CGFloat, _ mw: CGFloat) {
-            p.addRect(CGRect(x: x - mw / 2, y: b - h * top, width: mw, height: h * top))
-            p.move(to: CGPoint(x: x - mw * 0.8, y: b - h * top))
-            p.addLine(to: CGPoint(x: x, y: b - h * (top + 0.12)))
-            p.addLine(to: CGPoint(x: x + mw * 0.8, y: b - h * top))
-            p.closeSubpath()
-        }
-        func dome(_ x: CGFloat, _ radius: CGFloat, _ base: CGFloat) {
-            p.addRect(CGRect(x: x - radius, y: b - base, width: radius * 2, height: base))
-            p.addArc(center: CGPoint(x: x, y: b - base), radius: radius, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-            p.move(to: CGPoint(x: x - 1.5, y: b - base - radius))
-            p.addRect(CGRect(x: x - 1.5, y: b - base - radius - h * 0.08, width: 3, height: h * 0.08))
-        }
-        p.addRect(CGRect(x: 0, y: b - h * 0.18, width: w, height: h * 0.18))
-        dome(w * 0.5, w * 0.16, h * 0.32)
-        dome(w * 0.27, w * 0.08, h * 0.22)
-        dome(w * 0.73, w * 0.08, h * 0.22)
-        minaret(w * 0.1, 0.78, w * 0.035)
-        minaret(w * 0.9, 0.78, w * 0.035)
-        return p
-    }
-}
-
-/// The home screens' background: the theme's own background with the pattern and a mosque skyline, very faint.
+/// The home screens' background: his realistic photo, full-bleed and strongly blurred (ضبابي),
+/// under a scrim in the active theme's colours so the text stays readable on every theme.
 struct HomeBackdrop: View {
+    static let photo: UIImage? = Bundle.main.url(forResource: "home_bg_real", withExtension: "jpg").flatMap { UIImage(contentsOfFile: $0.path) }
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Brand.bg
-            IslamicPattern(color: Brand.navy, cell: 44, lineWidth: 0.7).opacity(0.06)
-            MosqueSilhouette().fill(Brand.navy).opacity(0.05).frame(height: 170).padding(.horizontal, -10)
+        GeometryReader { geo in
+            ZStack {
+                Brand.bg
+                if let img = Self.photo {
+                    Image(uiImage: img).resizable().scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .blur(radius: 22, opaque: true)
+                        .clipped()
+                    LinearGradient(colors: [Brand.bg.opacity(0.40), Brand.bg.opacity(0.54), Brand.bg.opacity(0.68)], startPoint: .top, endPoint: .bottom)
+                    Brand.navy.opacity(0.06)
+                }
+            }
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)

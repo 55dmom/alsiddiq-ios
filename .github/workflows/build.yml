@@ -221,7 +221,7 @@ jobs:
                        "44_tools_tab_teacher","45_tools_tab_viewer","47_tools_tab_night","49_tools_tab_grid","00_password","48_password_tools_below","74_67_tools_tab",
                        "50_se_admin_home","51_se_teacher_home","52_se_viewer_home","53_se_tools_tab","55_se_tools_tab_grid","56_se_password_tools",
                        "03_role_login_admin","07_admin_home","12_teacher_home","01_viewer_home",
-                       "98_tasbeeh_v2_open1","98b_tasbeeh_v2_open2","99_asma_v2_open1","99b_asma_v2_open2"], "ios_tabs_fix.jpg")
+                       "97_contact_developer","98_tasbeeh_v2_open1","98b_tasbeeh_v2_open2","99_asma_v2_open1","99b_asma_v2_open2"], "ios_tabs_fix.jpg")
           small_sheet(["60_se_mushaf_p1","61_se_mushaf_p3","62_se_mushaf_p552","80_mushaf_p1","81_mushaf_p3","82_mushaf_p552",
                        "70_67_mushaf_p1","71_67_mushaf_p3","72_67_mushaf_p552","73_67_mushaf_p3_bigger",
                        "85_hifz_recite_start","86_hifz_recite_progress","63_se_hifz_recite"], "ios_mushaf_hifz.jpg", cols2=5)

@@ -112,6 +112,7 @@ shot 94_honors_viewer viewer honors 8
 shot 95_honor_publish admin honor_publish 8
 EXTRA="-ciHonorCard YES" shot 96_honor_greeting viewer home 10
 # his v2 tasbeeh / asma from the «الأدوات» tab, each opened twice (the scene moves to the next video + sound on every opening)
+EXTRA="-openTabTool developer" shot 97_contact_developer admin tools 9
 EXTRA="-openTabTool tasbeeh" shot 98_tasbeeh_v2_open1 admin tools 14
 EXTRA="-openTabTool tasbeeh" shot 98b_tasbeeh_v2_open2 admin tools 14
 EXTRA="-openTabTool asma" shot 99_asma_v2_open1 admin tools 14

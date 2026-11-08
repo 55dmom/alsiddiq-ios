@@ -287,7 +287,7 @@ struct AdminEventsScreen: View {
     var body: some View {
         let snap = model.snap
         let list = snap.events
-        ScreenList(title: "نشاط المعلمين", actions: {
+        ScreenList(title: "الإشعارات", actions: {
             if list.contains(where: { $0.readAt == nil }) {
                 TextAction(title: "قراءة الكل", color: Brand.navy) { model.run("تم تعليم الكل كمقروء", { try await model.repo.markAllEventsRead() }) }
             }

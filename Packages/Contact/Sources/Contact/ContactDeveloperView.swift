@@ -3,14 +3,29 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Contact info (same as «تواصل معنا» in تفاؤل). Nothing is stored; no accounts, no forms.
+/// Contact info: the developer's own email and personal Telegram. Nothing is stored; no accounts, no forms.
+/// (Instagram has its row ready; it is hidden until a handle is given.)
 enum CtInfo {
     static let title = "تواصل مع المطوّر"
     static let subtitle = "تواصل معنا"
-    static let body = "راسلنا على قناة تفاؤل في تيليجرام: اقتراح، سؤال، أو استفسار."
-    static let button = "افتح قناة تفاؤل في تيليجرام"
-    static let link = "t.me/tafaulapp"
-    static let url = URL(string: "https://t.me/tafaulapp")!
+    static let body = "راسلني على الإيميل أو تيليجرام: اقتراح، سؤال، أو استفسار."
+    static let instagram: CtRow? = nil
+    static let rows: [CtRow] = [
+        CtRow(id: "email", label: "الإيميل", icon: "envelope.fill", color: Color(red: 0.11, green: 0.36, blue: 0.62),
+              shown: "Allethyeme@gmail.com", url: URL(string: "mailto:Allethyeme@gmail.com")!),
+        CtRow(id: "telegram", label: "تيليجرام", icon: "paperplane.fill", color: CtTheme.telegram,
+              shown: "t.me/a16da", url: URL(string: "https://t.me/a16da")!)
+    ] + (instagram.map { [$0] } ?? [])
+}
+
+struct CtRow: Identifiable {
+    let id: String
+    let label: String
+    let icon: String
+    let color: Color
+    /// What the row shows and what «نسخ» copies.
+    let shown: String
+    let url: URL
 }
 
 /// Colours for this button only (light / dark follow the system).
@@ -40,15 +55,17 @@ enum CtTheme {
 
 final class CtModel: ObservableObject {
     @Published var copied = false
+    @Published var copiedId: String? = nil
     @Published var appeared = false
-    func copy() {
+    func copy(_ r: CtRow) {
+        copiedId = r.id
         #if canImport(UIKit)
-        UIPasteboard.general.string = CtInfo.url.absoluteString
+        UIPasteboard.general.string = r.shown
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
-            withAnimation(.easeOut(duration: 0.25)) { self?.copied = false }
+            withAnimation(.easeOut(duration: 0.25)) { self?.copied = false; self?.copiedId = nil }
         }
     }
 }
@@ -115,29 +132,7 @@ public struct ContactDeveloperView: View {
                 .font(.callout).foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Button { openURL(CtInfo.url) } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "paperplane.fill")
-                    Text(verbatim: CtInfo.button).font(.headline)
-                }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .foregroundColor(.white)
-                .background(CtTheme.telegram, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .buttonStyle(CtPress())
-            Text(verbatim: CtInfo.link)
-                .font(.footnote.monospaced()).foregroundColor(.secondary)
-                .environment(\.layoutDirection, .leftToRight)
-            HStack(spacing: 10) {
-                Button { model.copy() } label: {
-                    small(icon: model.copied ? "checkmark" : "doc.on.doc", title: model.copied ? "انتسخ" : "نسخ الرابط")
-                }
-                .buttonStyle(CtPress())
-                ShareLink(item: CtInfo.url) {
-                    small(icon: "square.and.arrow.up", title: "مشاركة الرابط")
-                }
-                .buttonStyle(CtPress())
-            }
+            ForEach(CtInfo.rows) { r in row(r) }
         }
         .padding(18)
         .frame(maxWidth: .infinity)
@@ -148,21 +143,58 @@ public struct ContactDeveloperView: View {
         .opacity(model.appeared ? 1 : 0)
     }
 
-    private func small(icon: String, title: String) -> some View {
+    private func row(_ r: CtRow) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(r.color.opacity(0.14)).frame(width: 42, height: 42)
+                    Image(systemName: r.icon).font(.system(size: 18, weight: .semibold)).foregroundColor(r.color)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: r.label).font(.headline)
+                    Text(verbatim: r.shown).font(.footnote.monospaced()).foregroundColor(.secondary)
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                Button { openURL(r.url) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.forward.app")
+                        Text(verbatim: "فتح").font(.subheadline.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .foregroundColor(.white)
+                    .background(r.color, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(CtPress())
+                .accessibilityIdentifier("contactOpen_" + r.id)
+                Button { model.copy(r) } label: {
+                    small(icon: model.copiedId == r.id ? "checkmark" : "doc.on.doc", title: model.copiedId == r.id ? "انتسخ" : "نسخ", color: r.color)
+                }
+                .buttonStyle(CtPress())
+                .accessibilityIdentifier("contactCopy_" + r.id)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(CtTheme.bg))
+    }
+
+    private func small(icon: String, title: String, color: Color = CtTheme.telegram) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
             Text(verbatim: title).font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity, minHeight: 44)
-        .foregroundColor(CtTheme.telegram)
-        .background(CtTheme.soft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .foregroundColor(color)
+        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder private var toast: some View {
         if model.copied {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
-                Text(verbatim: "تم نسخ الرابط")
+                Text(verbatim: "تم النسخ")
             }
             .font(.subheadline.weight(.semibold))
             .foregroundColor(.white)

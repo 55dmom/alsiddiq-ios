@@ -165,7 +165,7 @@ struct ViewerSettingsScreen: View {
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
-            MenuRow(title: "تواصل مع المطوّر", sub: "قناة تفاؤل في تيليجرام", icon: "paperplane") { tools.show(.developer) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {
                 dialogs.show(ConfirmDialog(title: "قفل التطبيق؟", message: "ستحتاج كلمة السر لفتحه مرة أخرى.", confirm: "قفل", destructive: true) {
@@ -197,12 +197,11 @@ struct MoreScreen: View {
             MenuRow(title: "الإعلانات", sub: "\(snap.announcements.count) إعلان", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "المكافآت", sub: "النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "المتفوقون", sub: "اظهر تفوق الطالب", icon: "rosette", tint: Brand.gold) { router.go(.honors) }
-            MenuRow(title: "نشاط المعلمين", sub: snap.unreadEvents > 0 ? "\(snap.unreadEvents) جديد" : "تسجيل الطلاب وفصلهم", icon: "bell.badge") { router.go(.adminEvents) }
             MenuRow(title: "بيانات المركز", sub: snap.center.name, icon: "building.columns") { router.go(.centerSettings) }
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
-            MenuRow(title: "تواصل مع المطوّر", sub: "قناة تفاؤل في تيليجرام", icon: "paperplane") { tools.show(.developer) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
         }
     }
@@ -227,7 +226,7 @@ struct TeacherMoreScreen: View {
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "building.2", tint: Brand.maroon) { tools.show(.about) }
-            MenuRow(title: "تواصل مع المطوّر", sub: "قناة تفاؤل في تيليجرام", icon: "paperplane") { tools.show(.developer) }
+            MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "paperplane") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
         }
     }

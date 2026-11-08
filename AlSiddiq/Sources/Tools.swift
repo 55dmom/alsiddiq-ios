@@ -23,7 +23,7 @@ enum ToolItem: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .themes: return "ألوان التطبيق"
         case .about: return "نبذة المركز وصوره وعنوانه وأرقام التواصل"
-        case .developer: return "قناة تفاؤل في تيليجرام"
+        case .developer: return "الإيميل وتيليجرام"
         case .mushaf: return "المصحف كاملاً برسم المصحف العثماني"
         case .hifz: return "احفظ وراجع بإخفاء الآيات"
         case .khatma: return "خطة ختمة ومتابعة الورد اليومي"
