@@ -20,7 +20,7 @@ final class DemoRepository: AppRepository {
     func isPending(_ id: String) -> Bool {
         #if DEBUG
         let n = UserDefaults.standard.integer(forKey: "ciPending")
-        if n > 0 { return store.data.recitations.sorted { $0.recordedAt > $1.recordedAt }.prefix(n).contains { $0.id == id } }
+        if n > 0 { return store.data.recitations.filter { $0.studentId == "s1" }.sorted { $0.recordedAt > $1.recordedAt }.prefix(n).contains { $0.id == id } }
         #endif
         return false
     }

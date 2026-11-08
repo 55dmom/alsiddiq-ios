@@ -162,6 +162,39 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: art
+      - name: Contact sheet + small copies of the screens
+        if: always()
+        run: |
+          mkdir -p art/screenshots
+          python3 -m pip install --quiet pillow || pip3 install --quiet pillow || true
+          python3 - <<'PY' || true
+          import os, zipfile
+          from PIL import Image, ImageDraw
+          d = "art/screenshots"
+          order = ["00b_splash","00_password","01_viewer_home","18_tools_menu","18a_tool_mushaf","18b_tool_prayer",
+                   "20_themes_picker","21_theme_emerald","22_theme_night_teacher","24_occasion_ramadan_popup","29_occasion_sep26_popup","31_occasion_picker_locked",
+                   "32_about","33_about_admin","34_developer","10_admin_teachers","09_admin_passwords","11_admin_circles",
+                   "12_teacher_home","13_teacher_circle","14_teacher_record","35_offline_pending_home","36_offline_pending_history","37_admin_circle_edit_fee","38_viewer_circle_fee"]
+          have = [n for n in order if os.path.exists(f"{d}/{n}.png")]
+          w, cols = 320, 5
+          ims = [Image.open(f"{d}/{n}.png").convert("RGB") for n in have]
+          if ims:
+              h = int(ims[0].height * w / ims[0].width)
+              sheet = Image.new("RGB", (cols * w, ((len(ims) + cols - 1) // cols) * (h + 22)), "white")
+              dr = ImageDraw.Draw(sheet)
+              for k, (n, im) in enumerate(zip(have, ims)):
+                  x, y = (k % cols) * w, (k // cols) * (h + 22)
+                  sheet.paste(im.resize((w, h)), (x, y + 22))
+                  dr.text((x + 6, y + 5), n, fill="black")
+              sheet.save(f"{d}/ios_screens_v3.jpg", quality=82)
+          with zipfile.ZipFile(f"{d}/shots_small.zip", "w") as z:
+              for f in sorted(os.listdir(d)):
+                  if f.endswith(".png"):
+                      im = Image.open(f"{d}/{f}").convert("RGB"); im.thumbnail((420, 920)); im.save("/tmp/s.jpg", quality=80)
+                      z.write("/tmp/s.jpg", f[:-4] + ".jpg")
+          print("sheet:", len(have), "screens")
+          PY
+          ls -la art/screenshots | tail -5
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -169,7 +202,7 @@ jobs:
           ls -R art | head -60
           TAG=build-${{ github.run_number }}
           FILES="art/AlSiddiq_unsigned/AlSiddiq_unsigned.ipa art/build-log/build.log"
-          if [ -d art/screenshots ]; then FILES="$FILES $(ls art/screenshots/*.png 2>/dev/null | tr '\n' ' ')"; fi
+          if [ -d art/screenshots ]; then FILES="$FILES $(ls art/screenshots/*.png art/screenshots/*.jpg art/screenshots/*.zip art/screenshots/*.txt 2>/dev/null | tr '\n' ' ')"; fi
           MODE="demo data (no central database configured)"
           if [ -n "$SUPABASE_URL" ]; then MODE="central database: $SUPABASE_URL"; fi
           gh release create "$TAG" $FILES --repo "${{ github.repository }}" --title "مركز الصديق iOS — build ${{ github.run_number }}" \
