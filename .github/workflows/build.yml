@@ -239,5 +239,12 @@ jobs:
           if [ -d art/screenshots ]; then FILES="$FILES $(ls art/screenshots/*.png art/screenshots/*.jpg art/screenshots/*.zip art/screenshots/*.txt 2>/dev/null | tr '\n' ' ')"; fi
           MODE="demo data (no central database configured)"
           if [ -n "$SUPABASE_URL" ]; then MODE="central database: $SUPABASE_URL"; fi
-          gh release create "$TAG" $FILES --repo "${{ github.repository }}" --title "مركز الصديق iOS — build ${{ github.run_number }}" \
+          gh release create "$TAG" art/AlSiddiq_unsigned/AlSiddiq_unsigned.ipa --repo "${{ github.repository }}" --title "مركز الصديق iOS — build ${{ github.run_number }}" \
             --notes "Unsigned .ipa (sign it yourself). Data: $MODE. Commit ${{ github.sha }}."
+          # the rest one by one, so one bad file can't stop the others (an empty file is skipped)
+          for f in $FILES; do
+            [ -s "$f" ] || { echo "skip empty $f"; continue; }
+            [ "$f" = "art/AlSiddiq_unsigned/AlSiddiq_unsigned.ipa" ] && continue
+            gh release upload "$TAG" "$f" --repo "${{ github.repository }}" --clobber > /dev/null 2>&1 || echo "::warning::upload failed: $f"
+          done
+          gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets | length'

@@ -230,13 +230,6 @@ final class ThemeStore: ObservableObject {
         AppFont.applyBars()
     }
 
-    /// His tool packages read only these colour keys (their texts and logic are untouched).
-    private static func publishToolPalette(_ p: Palette) {
-        let d = UserDefaults.standard
-        for (k, v) in [("accent", p.toolAccent), ("soft", p.toolSoft), ("bg", p.toolBg)] {
-            if let v { d.set(Int(v), forKey: "alsiddiq.toolPalette." + k) } else { d.removeObject(forKey: "alsiddiq.toolPalette." + k) }
-        }
-    }
 }
 
 /// «الثيمات»: open to everyone, no password.
