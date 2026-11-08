@@ -29,13 +29,21 @@ final class NavBackUITests: XCTestCase {
         return app
     }
 
+    private func backCount(_ app: XCUIApplication) -> Int {
+        app.buttons.matching(NSPredicate(format: "label == %@ OR identifier == %@", "رجوع", "directBack")).count
+    }
+
     private func back(_ app: XCUIApplication) -> Bool {
         for id in ["directBack"] {
             let b = app.buttons[id]
             if b.exists { b.tap(); return true }
         }
         let b = app.buttons.matching(NSPredicate(format: "label == %@", "رجوع")).firstMatch
-        if b.exists { b.tap(); return true }
+        if b.exists {
+            // the app's own header back button: tap where it is drawn (it sits in the scrolling header)
+            b.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            return true
+        }
         let nb = app.navigationBars.buttons.firstMatch
         if nb.exists { nb.tap(); return true }
         return false
@@ -44,6 +52,7 @@ final class NavBackUITests: XCTestCase {
     private func check(_ who: String, _ route: String, list marker: String, rows: [String], tag: String) {
         let app = launch(who, route)
         note("\(tag): list shown=\(any(app, marker).waitForExistence(timeout: 10))")
+        let baseBacks = backCount(app)   // the list's own back buttons (a pushed page adds one)
         for (k, row) in rows.enumerated() {
             let cell = any(app, row)
             _ = cell.waitForExistence(timeout: 4)
@@ -56,11 +65,13 @@ final class NavBackUITests: XCTestCase {
             if k == 0 { shot("N_\(tag)_\(k)_open") }
             let tapped = back(app)
             sleep(2)
-            let onList = any(app, marker).exists || any(app, row).exists
+            // back on the list = its marker row is there again and the page's own back button is gone
+            let onList = any(app, marker).waitForExistence(timeout: 4) && backCount(app) == baseBacks
             let toolsSheet = app.buttons.matching(NSPredicate(format: "label == %@", "إغلاق")).firstMatch.exists
             note("\(tag) | \(row) | back tapped=\(tapped) | on the list again=\(onList) | tools sheet=\(toolsSheet) | \(onList && !toolsSheet ? "OK" : "FAIL")")
             if k == 0 || !(onList && !toolsSheet) { shot("N_\(tag)_\(k)_after_back") }
             if !onList || toolsSheet {
+                _ = back(app); sleep(1)
                 // get back to the list for the next row
                 let close = app.buttons.matching(NSPredicate(format: "label == %@", "إغلاق")).firstMatch
                 if close.exists { close.tap(); sleep(1) }
