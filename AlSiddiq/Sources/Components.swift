@@ -590,3 +590,26 @@ struct SyncLine: View {
         }
     }
 }
+
+/// The centre's ORIGINAL logo (never redrawn), shown wholly inside a circle: a white disc with the logo
+/// scaled to fit inside it with padding, clipped round, so no square corner shows past the circle.
+/// Measured on logo.jpg (640x640, white background): every inked pixel, the name text included, lies within
+/// 0.528 of the image side from a point 5.5% of the side above the image centre; `side` is chosen so that
+/// circle sits `padding` inside the disc.
+struct RoundLogo: View {
+    var diameter: CGFloat
+    var padding: CGFloat
+    var body: some View {
+        let side = max(0, (diameter / 2 - padding) / 0.528)
+        ZStack {
+            SwiftUI.Circle().fill(Color.white)
+            Image("Logo").resizable().scaledToFit()
+                .frame(width: side, height: side)
+                // logo.jpg's first pixel column is a grey hairline; trim it so no line shows on the white disc
+                .clipShape(Rectangle().inset(by: side * 0.004))
+                .offset(y: -side * 0.055)
+        }
+        .frame(width: diameter, height: diameter)
+        .clipShape(SwiftUI.Circle())
+    }
+}

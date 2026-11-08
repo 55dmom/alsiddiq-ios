@@ -100,13 +100,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             2>&1 | tee sim.log | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" || true
           grep -q "BUILD SUCCEEDED" sim.log
-      - name: Shoot
-        timeout-minutes: 25
-        run: bash ci/shots.sh "${{ steps.sim.outputs.udid }}"
-      - name: Shoot (iPhone SE and 6.7-inch)
-        if: always()
-        timeout-minutes: 22
-        run: bash ci/shots_sizes.sh "${{ steps.sim.outputs.udid }}"
+      - name: Shoot (opening screen on iPhone SE and 6.7-inch; full passes are ci/shots.sh + ci/shots_sizes.sh)
+        timeout-minutes: 20
+        run: bash ci/shots_gate.sh "${{ steps.sim.outputs.udid }}"
       - name: Unit tests (offline sync against a mock server)
         if: always()
         timeout-minutes: 15
@@ -225,6 +221,7 @@ jobs:
           small_sheet(["60_se_mushaf_p1","61_se_mushaf_p3","62_se_mushaf_p552","80_mushaf_p1","81_mushaf_p3","82_mushaf_p552",
                        "70_67_mushaf_p1","71_67_mushaf_p3","72_67_mushaf_p552","73_67_mushaf_p3_bigger",
                        "85_hifz_recite_start","86_hifz_recite_progress","63_se_hifz_recite"], "ios_mushaf_hifz.jpg", cols2=5)
+          small_sheet(["L1_se_password","L2_67_password","L3_se_admin_home_header"], "ios_logo_fix.jpg", cols2=3)
           small_sheet(["90_admin_home_bell","91_admin_events","92_admin_event_card","93_teacher_student_edit_dismiss",
                        "94_honors_viewer","95_honor_publish","96_honor_greeting"], "ios_students_honors.jpg", cols2=4)
           PY

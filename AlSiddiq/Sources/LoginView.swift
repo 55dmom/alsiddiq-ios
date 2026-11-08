@@ -34,10 +34,10 @@ struct GateFrame<Content: View>: View {
                 ZStack {
                     SwiftUI.Circle().fill(Lux.gold.opacity(glow ? 0.34 : 0.14)).frame(width: 186, height: 186).blur(radius: 28)
                     SwiftUI.Circle().stroke(Lux.goldGradient, lineWidth: 1).frame(width: 162, height: 162).opacity(0.55)
-                    SwiftUI.Circle().fill(Color.white).frame(width: 140, height: 140)
+                    // the whole logo sits INSIDE the ring: a white disc, the logo fitted with padding, clipped round
+                    RoundLogo(diameter: 140, padding: 10)
                         .overlay(SwiftUI.Circle().stroke(Lux.goldGradient, lineWidth: 4))
                         .shadow(color: Lux.gold.opacity(0.45), radius: 16, x: 0, y: 0)
-                    Image("Logo").resizable().scaledToFit().frame(width: 112, height: 112)
                 }
                 .frame(height: 190)
                 .scaleEffect(shown ? 1 : 0.86)

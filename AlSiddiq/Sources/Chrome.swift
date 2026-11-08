@@ -101,11 +101,7 @@ struct HomeHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                ZStack {
-                    SwiftUI.Circle().fill(Color.white)
-                    Image("Logo").resizable().scaledToFit().frame(width: 40, height: 40).clipShape(SwiftUI.Circle())
-                }
-                .frame(width: 46, height: 46)
+                RoundLogo(diameter: 46, padding: 3)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(greeting).font(T.bodySmall).foregroundColor(.white.opacity(0.75))
                     Text(title).font(T.titleLarge).foregroundColor(.white).lineLimit(1)
