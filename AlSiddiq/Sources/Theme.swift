@@ -8,27 +8,28 @@ extension Color {
     }
 }
 
-/// Palette taken from the centre's logo (same values as the Android app).
+/// Palette taken from the centre's logo (same values as the Android app); the theme («الثيمات») swaps the set.
 enum Brand {
-    static let navy = Color(hex: 0x282564)
-    static let navyDark = Color(hex: 0x1B1947)
-    static let navyMid = Color(hex: 0x3A3486)
-    static let navySoft = Color(hex: 0xE9E8F5)
-    static let maroon = Color(hex: 0x6B2A2C)
-    static let maroonSoft = Color(hex: 0xF6E9E9)
-    static let gold = Color(hex: 0xC9A24A)
-    static let goldSoft = Color(hex: 0xFBF3E0)
-    static let goldInk = Color(hex: 0x7A5C14)
+    private static var p: Palette { ThemeStore.palette }
+    static var navy: Color { Color(hex: p.navy) }
+    static var navyDark: Color { Color(hex: p.navyDark) }
+    static var navyMid: Color { Color(hex: p.navyMid) }
+    static var navySoft: Color { Color(hex: p.navySoft) }
+    static var maroon: Color { Color(hex: p.maroon) }
+    static var maroonSoft: Color { Color(hex: p.maroonSoft) }
+    static var gold: Color { Color(hex: p.gold) }
+    static var goldSoft: Color { Color(hex: p.goldSoft) }
+    static var goldInk: Color { Color(hex: p.goldInk) }
     static let green = Color(hex: 0x2E7D5B)
-    static let greenSoft = Color(hex: 0xE5F3EC)
+    static var greenSoft: Color { p.dark ? Color(hex: 0x1D3A2E) : Color(hex: 0xE5F3EC) }
     static let teal = Color(hex: 0x3C8D7A)
     static let orange = Color(hex: 0xD9822B)
     static let red = Color(hex: 0xC0392B)
-    static let bg = Color(hex: 0xF7F7FB)
-    static let card = Color.white
-    static let ink = Color(hex: 0x1E1D2F)
-    static let muted = Color(hex: 0x6E6D80)
-    static let line = Color(hex: 0xE6E5EF)
+    static var bg: Color { Color(hex: p.bg) }
+    static var card: Color { Color(hex: p.card) }
+    static var ink: Color { Color(hex: p.ink) }
+    static var muted: Color { Color(hex: p.muted) }
+    static var line: Color { Color(hex: p.line) }
     static let silver = Color(hex: 0xA7A9B4)
     static let bronze = Color(hex: 0xB0773F)
 }
@@ -47,12 +48,16 @@ enum AppFont {
             CTFontManagerRegisterGraphicsFont(font, &error)
             if let ps = font.postScriptName as String? { names[weight] = ps }
         }
-        // Navigation and tab bars use the same face.
-        if let ps = names[.semibold], let ui = UIFont(name: ps, size: 17) {
-            UINavigationBar.appearance().titleTextAttributes = [.font: ui, .foregroundColor: UIColor(Brand.ink)]
-        }
+        applyBars()
         if let ps = names[.medium], let ui = UIFont(name: ps, size: 11) {
             UITabBarItem.appearance().setTitleTextAttributes([.font: ui], for: .normal)
+        }
+    }
+
+    /// Navigation bar titles use the same face, in the active theme's ink.
+    static func applyBars() {
+        if let ps = names[.semibold], let ui = UIFont(name: ps, size: 17) {
+            UINavigationBar.appearance().titleTextAttributes = [.font: ui, .foregroundColor: UIColor(Brand.ink)]
         }
     }
 

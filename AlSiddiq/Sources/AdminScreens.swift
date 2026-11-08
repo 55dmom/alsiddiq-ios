@@ -161,6 +161,7 @@ struct ViewerSettingsScreen: View {
             }
             SectionHeader(title: "عام")
             MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
+            MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {
@@ -175,6 +176,7 @@ struct ViewerSettingsScreen: View {
 /// Admin section («الإدارة» tab).
 struct MoreScreen: View {
     let user: Member
+    @EnvironmentObject var tools: ToolsHost
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var router: Router
     var body: some View {
@@ -192,6 +194,8 @@ struct MoreScreen: View {
             MenuRow(title: "الإعلانات", sub: "\(snap.announcements.count) إعلان", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "المكافآت", sub: "النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "بيانات المركز", sub: snap.center.name, icon: "building.columns") { router.go(.centerSettings) }
+            MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
+            MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
         }
     }
@@ -200,6 +204,7 @@ struct MoreScreen: View {
 /// Teachers section «المزيد».
 struct TeacherMoreScreen: View {
     let user: Member
+    @EnvironmentObject var tools: ToolsHost
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var router: Router
     @EnvironmentObject var dialogs: DialogHost
@@ -217,6 +222,8 @@ struct TeacherMoreScreen: View {
             MenuRow(title: "المكافآت", sub: "منح النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) }
             MenuRow(title: "التقارير", sub: "إحصائيات الحفظ والحضور", icon: "chart.bar.xaxis") { router.go(.reports) }
             MenuRow(title: "الإعلانات", sub: "إعلانات المركز", icon: "megaphone") { router.go(.announcements) }
+            MenuRow(title: "الأدوات", sub: "المصحف، مواقيت الصلاة، الأذكار، الأدعية…", icon: "square.grid.2x2", tint: Brand.gold) { tools.show() }
+            MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
         }
     }

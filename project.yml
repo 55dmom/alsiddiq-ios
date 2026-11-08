@@ -7,6 +7,10 @@ options:
 packages:
   Mushaf:
     path: Packages/Mushaf
+  Hifz:
+    path: Packages/Hifz
+  Khatma:
+    path: Packages/Khatma
   PrayerTimes:
     path: Packages/PrayerTimes
   Adhkar:
@@ -25,6 +29,8 @@ targets:
       - path: AlSiddiq
     dependencies:
       - package: Mushaf
+      - package: Hifz
+      - package: Khatma
       - package: PrayerTimes
       - package: Adhkar
       - package: Duas
@@ -61,8 +67,8 @@ targets:
         PRODUCT_NAME: AlSiddiq
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: "3.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "3.1"
+        CURRENT_PROJECT_VERSION: "4"
         SUPABASE_URL: ""
         SUPABASE_ANON_KEY: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

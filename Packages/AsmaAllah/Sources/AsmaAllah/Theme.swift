@@ -5,11 +5,11 @@ import UIKit
 
 /// Colours for this button only (light / dark follow the system).
 enum AsmTheme {
-    static let accent = dyn(light: 0x7A5A12, dark: 0xE0B64F)
-    static let bg = dyn(light: 0xF4F6F5, dark: 0x0E1110)
+    static var accent: Color { HostPalette.color("accent") ?? dyn(light: 0x7A5A12, dark: 0xE0B64F) }
+    static var bg: Color { HostPalette.color("bg") ?? dyn(light: 0xF4F6F5, dark: 0x0E1110) }
     static let card = dyn(light: 0xFFFFFF, dark: 0x1A1F1D)
     static let line = dyn(light: 0xE3E8E6, dark: 0x2A312E)
-    static let soft = dyn(light: 0xE8F3EF, dark: 0x16302A)
+    static var soft: Color { HostPalette.color("soft") ?? dyn(light: 0xE8F3EF, dark: 0x16302A) }
 
     static func dyn(light: UInt32, dark: UInt32) -> Color {
         #if canImport(UIKit)

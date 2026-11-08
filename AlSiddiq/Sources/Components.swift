@@ -70,7 +70,7 @@ struct OutlineButton: View {
             }
             .foregroundColor(enabled ? color : Brand.muted)
             .frame(maxWidth: .infinity).frame(height: height)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.line, lineWidth: 1.2).background(Color.white.cornerRadius(14)))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.line, lineWidth: 1.2).background(Brand.card.cornerRadius(14)))
         }
         .buttonStyle(PressableStyle())
         .disabled(!enabled)
@@ -445,7 +445,7 @@ struct ChoiceChips: View {
                         }
                         .foregroundColor(sel ? .white : Brand.ink)
                         .padding(.horizontal, 14).frame(height: 34)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sel ? Brand.navy : Color.white))
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sel ? Brand.navy : Brand.card))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(sel ? Brand.navy : Brand.line, lineWidth: 1))
                     }
                 }
@@ -486,7 +486,7 @@ struct Field: View {
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, multiline ? 8 : 12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.card))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.line, lineWidth: 1.2))
         }
     }
@@ -523,7 +523,7 @@ struct SelectorField: View {
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.card))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.line, lineWidth: 1.2))
         }
         .buttonStyle(PressableStyle())
@@ -542,7 +542,7 @@ struct SearchField: View {
             }
         }
         .padding(.horizontal, 14).frame(height: 50)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.card))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.line, lineWidth: 1.2))
     }
 }
@@ -558,7 +558,7 @@ struct AssistChip: View {
         Button(action: action) {
             Text(title).font(T.labelLarge).foregroundColor(Brand.ink)
                 .padding(.horizontal, 14).frame(height: 34)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white))
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Brand.card))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Brand.line, lineWidth: 1))
         }
     }

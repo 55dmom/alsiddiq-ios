@@ -129,6 +129,7 @@ struct HomeHeader: View {
             }
             Spacer().frame(height: 14)
             Text(subtitle).font(T.bodyMedium).foregroundColor(.white.opacity(0.85))
+            OccasionCard().padding(.top, 12)
         }
         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 26)
         .background(
@@ -162,7 +163,7 @@ struct DialogCard<Content: View, Buttons: View>: View {
             }
         }
         .padding(22)
-        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Brand.card))
         .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 10)
         .padding(.horizontal, 24)
     }

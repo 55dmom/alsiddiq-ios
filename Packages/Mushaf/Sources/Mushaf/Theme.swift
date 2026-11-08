@@ -5,12 +5,12 @@ import UIKit
 
 /// Colours for this button only (light / dark follow the system).
 enum MsTheme {
-    static let accent = dyn(light: 0x166534, dark: 0x4ADE80)
+    static var accent: Color { HostPalette.color("accent") ?? dyn(light: 0x166534, dark: 0x4ADE80) }
     static let accent2 = dyn(light: 0x0F766E, dark: 0x2DD4BF)
-    static let bg = dyn(light: 0xF3F5F7, dark: 0x0B0E12)
+    static var bg: Color { HostPalette.color("bg") ?? dyn(light: 0xF3F5F7, dark: 0x0B0E12) }
     static let card = dyn(light: 0xFFFFFF, dark: 0x161A20)
     static let line = dyn(light: 0xE4E8EE, dark: 0x262C35)
-    static let soft = dyn(light: 0xE3ECE6, dark: 0x204133)
+    static var soft: Color { HostPalette.color("soft") ?? dyn(light: 0xE3ECE6, dark: 0x204133) }
     static let paper = dyn(light: 0xFBF8F1, dark: 0x0F1210)
     static let gold = dyn(light: 0xB7791F, dark: 0xF2C14E)
     static let good = dyn(light: 0x15803D, dark: 0x4ADE80)

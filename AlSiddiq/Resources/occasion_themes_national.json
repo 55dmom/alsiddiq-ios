@@ -1,0 +1,54 @@
+{
+ "sep26": {
+  "schema": 1,
+  "kind": "ui",
+  "theme": {
+   "id": "sep26",
+   "palette": "yemen",
+   "accent": "gold",
+   "force": true
+  },
+  "home": {
+   "cards": [
+    {
+     "id": "sep26",
+     "title": {
+      "ar": "عيد ثورة ٢٦ سبتمبر المجيد 🇾🇪"
+     },
+     "body": {
+      "ar": "كل عام واليمن بخير وعزّ."
+     },
+     "icon": "flag.fill",
+     "color": "gold",
+     "position": "top"
+    }
+   ]
+  }
+ },
+ "may22": {
+  "schema": 1,
+  "kind": "ui",
+  "theme": {
+   "id": "may22",
+   "palette": "yemen",
+   "accent": "gold",
+   "force": true
+  },
+  "home": {
+   "cards": [
+    {
+     "id": "may22",
+     "title": {
+      "ar": "عيد الوحدة اليمنية ٢٢ مايو 🇾🇪"
+     },
+     "body": {
+      "ar": "كل عام واليمن موحّد وبخير."
+     },
+     "icon": "flag.fill",
+     "color": "gold",
+     "position": "top"
+    }
+   ]
+  }
+ }
+}

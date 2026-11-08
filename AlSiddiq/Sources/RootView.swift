@@ -4,6 +4,8 @@ struct RootView: View {
     @EnvironmentObject var model: AppModel
     @StateObject private var dialogs = DialogHost()
     @StateObject private var tools = ToolsHost()
+    @ObservedObject private var theme = ThemeStore.shared
+    @State private var greeting: OccasionTheme?
     @State private var splash = true
     let autoLogin: String?
     let startRoute: String?
@@ -21,6 +23,7 @@ struct RootView: View {
                     LoginView().transition(.opacity).onAppear { StatusBar.set(light: true) }
                 }
             }
+            .id(theme.active.id)   // a theme change redraws everything in the new colours
             .animation(.easeInOut(duration: 0.35), value: splash)
             .animation(.easeInOut(duration: 0.35), value: model.user?.id)
 
@@ -30,6 +33,11 @@ struct RootView: View {
                     .transition(.opacity)
                 d.transition(.scale(scale: 0.94).combined(with: .opacity))
                     .zIndex(2)
+            }
+            if let g = greeting, !splash {
+                OccasionGreeting(occasion: g) { withAnimation(.easeOut(duration: 0.25)) { greeting = nil } }
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    .zIndex(4)
             }
             if let t = model.toast {
                 VStack { Spacer(); ToastView(text: t).padding(.bottom, model.user == nil ? 24 : 92) }
@@ -43,7 +51,7 @@ struct RootView: View {
         .sheet(isPresented: $tools.open) { ToolsSheet().environmentObject(tools) }
         .environment(\.layoutDirection, .rightToLeft)
         .environment(\.locale, Locale(identifier: "ar"))
-        .preferredColorScheme(.light)
+        .preferredColorScheme(theme.active.palette.dark ? .dark : .light)
         .task {
             await handleAutoLogin()
             #if DEBUG
@@ -55,6 +63,11 @@ struct RootView: View {
             let hold = UserDefaults.standard.double(forKey: "holdSplash") // CI screenshots of the splash
             try? await Task.sleep(nanoseconds: hold > 0 ? UInt64(hold * 1e9) : (autoLogin == nil ? 1_800_000_000 : 300_000_000))
             withAnimation { splash = false }
+            if let o = theme.occasion, o.card != nil, OccasionGreeting.shouldShow(o) {
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { greeting = o }
+                OccasionGreeting.markShown(o)
+            }
             if let t = UserDefaults.standard.string(forKey: "openTool") { // CI screenshots
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 tools.show(ToolItem(rawValue: t))

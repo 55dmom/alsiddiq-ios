@@ -35,6 +35,7 @@ struct GateFrame<Content: View>: View {
                 Text(model.centerName.isEmpty ? "مركز الصديق لتعليم القرآن الكريم" : model.centerName)
                     .font(T.headlineSmall).foregroundColor(.white).multilineTextAlignment(.center)
                 Rectangle().fill(Brand.gold).frame(width: 54, height: 3).cornerRadius(2).padding(.top, 10)
+                OccasionCard().padding(.top, 16)
                 Spacer().frame(height: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).font(T.titleLarge).foregroundColor(Brand.ink)
@@ -42,7 +43,7 @@ struct GateFrame<Content: View>: View {
                     content()
                 }
                 .padding(20)
-                .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Color.white))
+                .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Brand.card))
                 .shadow(color: Brand.navy.opacity(0.18), radius: 16, x: 0, y: 8)
                 if model.isDemo {
                     Spacer().frame(height: 16)
@@ -88,7 +89,7 @@ struct PasswordInput: View {
             .accessibilityLabel(reveal ? "إخفاء" : "إظهار")
         }
         .padding(.horizontal, 14).frame(height: 56)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Brand.card))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.gold.opacity(0.7), lineWidth: 1.4))
     }
 }
