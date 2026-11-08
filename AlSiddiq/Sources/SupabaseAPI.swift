@@ -69,7 +69,8 @@ final class SupabaseAPI {
             if let v = obj?[k] as? String, !v.isEmpty { raw = v; break }
         }
         let low = raw.lowercased()
-        if low.contains("invalid login credentials") { return "رقم الجوال أو كلمة المرور غير صحيحة" }
+        if low.contains("invalid login credentials") { return "كلمة السر غير صحيحة" }
+        if code == 429 && !Self.hasArabic(raw) { return "محاولات خاطئة كثيرة، انتظر ربع ساعة ثم حاول" }
         if low.contains("row-level security") || code == 403 { return Self.hasArabic(raw) ? raw : "ليست لديك صلاحية لهذه العملية" }
         if low.contains("duplicate key") { return "هذا السجل موجود مسبقاً" }
         if !raw.isEmpty && Self.hasArabic(raw) { return raw }
@@ -93,6 +94,49 @@ final class SupabaseAPI {
         }
         let expiresIn = (o["expires_in"] as? NSNumber)?.doubleValue ?? 3600
         return Session(accessToken: at, refreshToken: rt, expiresAt: Date().addingTimeInterval(expiresIn), userId: uid)
+    }
+
+    /// The session object the «access» function returns (Supabase's own token response).
+    func sessionFrom(_ o: JSON) -> Session? {
+        guard let d = try? JSONSerialization.data(withJSONObject: o) else { return nil }
+        return try? session(from: d)
+    }
+
+    /// Raw call for the CI self-test: the server's own status code.
+    func rawStatus(_ method: String, _ path: String, token: String, body: Any?, headers: [String: String] = [:]) async -> Int {
+        (try? await exec(method, path, token: token, body: body, headers: headers).0) ?? -1
+    }
+
+    /// Storage: upload / download / delete an object in a bucket (the user's own token; the bucket's rules decide).
+    func storageUpload(token: String, bucket: String, path: String, data: Data, contentType: String = "image/jpeg") async throws {
+        guard let url = URL(string: "\(baseURL)/storage/v1/object/\(bucket)/\(path)") else { throw APIError(code: 0, message: "عنوان غير صحيح") }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(publicKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        req.setValue("true", forHTTPHeaderField: "x-upsert")
+        req.httpBody = data
+        let (d, resp): (Data, URLResponse)
+        do { (d, resp) = try await http.data(for: req) } catch { throw OfflineError() }
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200...299).contains(code) else { throw APIError(code: code, message: errorText(code, d)) }
+    }
+
+    func storageDownload(token: String, bucket: String, path: String) async throws -> Data {
+        guard let url = URL(string: "\(baseURL)/storage/v1/object/authenticated/\(bucket)/\(path)") else { throw APIError(code: 0, message: "عنوان غير صحيح") }
+        var req = URLRequest(url: url)
+        req.setValue(publicKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        let (d, resp): (Data, URLResponse)
+        do { (d, resp) = try await http.data(for: req) } catch { throw OfflineError() }
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200...299).contains(code) else { throw APIError(code: code, message: errorText(code, d)) }
+        return d
+    }
+
+    func storageDelete(token: String, bucket: String, path: String) async throws {
+        try await ok("DELETE", "/storage/v1/object/\(bucket)/\(path)", token: token)
     }
 
     func signIn(email: String, password: String) async throws -> Session {
@@ -177,11 +221,11 @@ enum Rows {
 
     static func center(_ o: JSON) -> CenterInfo { CenterInfo(name: s(o, "name") ?? "", city: s(o, "city") ?? "") }
 
-    static func member(_ o: JSON, _ children: [String: [String]]) -> Member? {
-        guard let id = s(o, "id") else { return nil }
-        return Member(id: id, fullName: s(o, "full_name") ?? "", phone: s(o, "phone") ?? "",
-                      role: Role(db: s(o, "role") ?? "") ?? .student, active: b(o, "active") ?? true,
-                      studentId: s(o, "student_id"), childIds: children[id] ?? [], createdAt: ts(o["created_at"]))
+    /// v3 accounts only (access_kind set); old build-5 phone accounts are ignored.
+    static func member(_ o: JSON) -> Member? {
+        guard let id = s(o, "id"), let kind = s(o, "access_kind"), let role = Role(db: kind) else { return nil }
+        return Member(id: id, fullName: s(o, "full_name") ?? "", role: role, active: b(o, "active") ?? true,
+                      createdAt: ts(o["created_at"]))
     }
 
     static func circle(_ o: JSON) -> StudyCircle? {

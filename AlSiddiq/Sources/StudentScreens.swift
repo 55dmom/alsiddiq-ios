@@ -18,11 +18,11 @@ struct StudentsScreen: View {
             let matches = needle.isEmpty || s.fullName.contains(needle) || s.phone.contains(needle)
             return inCircle && matches
         }
-        ScreenList(title: "الطلاب", fab: Permissions.canManageStudents(user) ? Fab(label: "طالب جديد") { router.go(.studentEdit("new", nil)) } : nil) {
+        ScreenList(title: "الطلاب", fab: Permissions.canEditStudents(user) ? Fab(label: "طالب جديد") { router.go(.studentEdit("new", nil)) } : nil) {
             SearchField(placeholder: "بحث باسم الطالب", text: $q)
             ChoiceChips(options: options, selected: circleIdx) { circleIdx = $0 }
             Text("\(list.count) طالب").font(T.labelMedium).foregroundColor(Brand.muted)
-            if list.isEmpty { EmptyState(title: "لا يوجد طلاب", message: needle.isEmpty ? "أضف أول طالب للمركز" : "لا نتائج مطابقة للبحث") }
+            if list.isEmpty { EmptyState(title: "لا يوجد طلاب", message: needle.isEmpty ? (Permissions.canEditStudents(user) ? "أضف أول طالب للمركز" : "تضيفهم الإدارة أو المعلمون") : "لا نتائج مطابقة للبحث") }
             ForEach(list) { s in
                 StudentRow(s: s, snap: snap, onTap: { router.go(.student(s.id)) }) {
                     Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold)).foregroundColor(Brand.muted)
@@ -32,7 +32,7 @@ struct StudentsScreen: View {
     }
 }
 
-/// The student progress dashboard, shared by the student's own home, parents and staff.
+/// The student progress dashboard (everyone sees it; only admin/teachers can change things).
 struct StudentDashboard: View {
     let s: Student
     let user: Member
@@ -44,6 +44,14 @@ struct StudentDashboard: View {
         let stats = Stats.forStudent(s, snap)
         let recent = snap.recitations.filter { $0.studentId == s.id }.sorted { $0.recordedAt > $1.recordedAt }.prefix(5)
         VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                StudentAvatar(s: s, size: 64)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(s.fullName).font(T.titleMedium).foregroundColor(Brand.ink)
+                    Text(snap.circle(s.circleId)?.name ?? "بدون حلقة").font(T.bodySmall).foregroundColor(Brand.muted)
+                }
+                Spacer()
+            }
             AppCard {
                 HStack(spacing: 16) {
                     ProgressRing(progress: stats.goalProgress, size: 118) {
@@ -92,10 +100,7 @@ struct StudentDashboard: View {
                 KeyValueRow(key: "تاريخ الالتحاق", value: Days.parse(s.joinedOn).map { Fmt.date($0) } ?? s.joinedOn)
                 if let b = s.birthYear { KeyValueRow(key: "سنة الميلاد", value: "\(b)") }
                 KeyValueRow(key: "الحالة", value: s.status.label)
-                if user.role == .admin || user.role == .teacher {
-                    let ps = snap.parentsOf(s.id).map { $0.fullName }.joined(separator: "، ")
-                    KeyValueRow(key: "أولياء الأمور", value: ps.isEmpty ? "—" : ps)
-                }
+                if !s.notes.isEmpty { KeyValueRow(key: "ملاحظات", value: s.notes) }
             }
         }
     }
@@ -103,8 +108,8 @@ struct StudentDashboard: View {
 
 extension StudentDashboard {
     func teacherName(_ snap: CenterSnapshot) -> String {
-        guard let c = snap.circle(s.circleId), let t = snap.member(c.teacherId) else { return "—" }
-        return t.fullName
+        guard let c = snap.circle(s.circleId), let t = snap.teacherName(of: c) else { return "—" }
+        return t
     }
 }
 
@@ -118,7 +123,7 @@ struct StudentDetailScreen: View {
         if let s = snap.student(id) {
             let canRecord = Permissions.canRecordFor(user, s, snap)
             ScreenList(title: s.fullName, fab: canRecord ? Fab(label: "تسجيل تسميع") { router.go(.record(s.id)) } : nil, actions: {
-                if Permissions.canManageStudents(user) {
+                if Permissions.canEditStudent(user, s, snap) {
                     Button { router.go(.studentEdit(s.id, nil)) } label: { Image(systemName: "pencil").font(.system(size: 18)).foregroundColor(Brand.ink).frame(width: 44, height: 44) }
                         .accessibilityLabel("تعديل")
                 }
@@ -146,11 +151,15 @@ struct StudentEditScreen: View {
     @State private var goal = "5"
     @State private var status: StudentStatus = .active
     @State private var notes = ""
+    @State private var picker: PhotoSource?
+    @State private var pendingPhoto: Data?
+    @State private var removePhoto = false
 
     var body: some View {
         let snap = model.snap
         let existing = snap.student(id)
         ScreenList(title: existing == nil ? "طالب جديد" : "تعديل بيانات الطالب") {
+            photoCard(existing)
             AppCard {
                 VStack(alignment: .leading, spacing: 10) {
                     Field(label: "اسم الطالب الكامل", text: $name)
@@ -176,16 +185,28 @@ struct StudentEditScreen: View {
                 st.goalJuz = min(max(Int(goal) ?? 5, 1), 30)
                 st.status = status
                 st.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-                model.run(existing == nil ? "تمت إضافة الطالب" : "تم الحفظ", { try await model.repo.saveStudent(st) }) { _ in router.back() }
+                let photo = pendingPhoto, drop = removePhoto
+                model.run(existing == nil ? "تمت إضافة الطالب" : "تم الحفظ", {
+                    let saved = try await model.repo.saveStudent(st)
+                    if let p = photo { try await model.repo.setStudentPhoto(studentId: saved.id, jpeg: p) }
+                    else if drop && saved.photoPath != nil { try await model.repo.setStudentPhoto(studentId: saved.id, jpeg: nil) }
+                    return saved
+                }) { _ in router.back() }
             }
-            if let ex = existing {
-                OutlineButton(title: "إنشاء حساب ولي أمر") { router.go(.memberEdit(.parent, "new")) }
+            if let ex = existing, Permissions.canDeleteStudents(user) {
                 Button {
                     dialogs.show(ConfirmDialog(title: "حذف الطالب؟", message: "ستُحذف جميع سجلاته وحضوره ومكافآته نهائياً.", confirm: "حذف", destructive: true) {
                         model.run("حُذف الطالب", { try await model.repo.deleteStudent(ex.id) }) { _ in router.popToRoot() }
                     })
                 } label: { Text("حذف الطالب").font(T.labelLarge).foregroundColor(Brand.red).frame(maxWidth: .infinity).padding(.vertical, 10) }
             }
+        }
+        .sheet(item: $picker) { src in
+            PhotoPickerSheet(source: src) { img in
+                picker = nil
+                if let img = img, let data = PhotoTools.jpeg512(img) { pendingPhoto = data; removePhoto = false }
+            }
+            .ignoresSafeArea()
         }
         .onAppear {
             guard !loaded else { return }
@@ -195,6 +216,43 @@ struct StudentEditScreen: View {
                 circleId = e.circleId; goal = String(e.goalJuz); status = e.status; notes = e.notes
             } else {
                 circleId = presetCircle
+            }
+        }
+    }
+}
+
+extension StudentEditScreen {
+    @ViewBuilder
+    func photoCard(_ existing: Student?) -> some View {
+        AppCard {
+            HStack(spacing: 14) {
+                ZStack {
+                    if let d = pendingPhoto, let img = UIImage(data: d) {
+                        Image(uiImage: img).resizable().scaledToFill().frame(width: 72, height: 72).clipShape(SwiftUI.Circle())
+                    } else if let e = existing, e.photoPath != nil, !removePhoto {
+                        StudentAvatar(s: e, size: 72)
+                    } else {
+                        Avatar(name: name.isEmpty ? "؟" : name, size: 72)
+                    }
+                }
+                .frame(width: 72, height: 72)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("صورة الطالب (اختياري)").font(T.titleSmall).foregroundColor(Brand.ink)
+                    HStack(spacing: 8) {
+                        Button { picker = .library } label: { Label("من الصور", systemImage: "photo.on.rectangle").font(T.labelMedium) }
+                            .buttonStyle(.bordered).tint(Brand.navy)
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button { picker = .camera } label: { Label("الكاميرا", systemImage: "camera").font(T.labelMedium) }
+                                .buttonStyle(.bordered).tint(Brand.navy)
+                        }
+                    }
+                    if pendingPhoto != nil || (existing?.photoPath != nil && !removePhoto) {
+                        Button { pendingPhoto = nil; removePhoto = true } label: {
+                            Text("إزالة الصورة").font(T.labelMedium).foregroundColor(Brand.red)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
             }
         }
     }
@@ -214,7 +272,7 @@ struct HistoryScreen: View {
             .sorted { $0.recordedAt > $1.recordedAt }
         let canDelete = s.map { Permissions.canRecordFor(user, $0, snap) } ?? false
         let groups = Dictionary(grouping: recs) { Days.dayOf($0.recordedAt) }.sorted { $0.key > $1.key }
-        ScreenList(title: user.role == .student ? "سجلّي" : "سجل \(s?.fullName ?? "")") {
+        ScreenList(title: "سجل \(s?.fullName ?? "")") {
             ChoiceChips(options: kinds, selected: kind) { kind = $0 }
             if recs.isEmpty { EmptyState(title: "لا توجد سجلات", message: "لم يُسجَّل شيء من هذا النوع بعد") }
             ForEach(groups, id: \.key) { g in

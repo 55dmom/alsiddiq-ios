@@ -16,6 +16,10 @@ struct PendingOp: Codable, Equatable {
 private struct CloudState: Codable {
     var session: Session?
     var me: Member?
+    /// The general (viewer) login kept underneath while the admin/teachers section is open.
+    var baseSession: Session?
+    var baseMe: Member?
+    var centerName: String = ""
     var centerId: String?
     var cache = CenterSnapshot()
     var outbox: [PendingOp] = []
@@ -38,6 +42,9 @@ final class CloudRepository: AppRepository {
     private var loop: Task<Void, Never>?
 
     var currentUser: Member? { st.me }
+    var baseUser: Member? { st.baseMe }
+    var centerName: String { st.centerName }
+    private var photoCache: [String: UIImage] = [:]
     var snapshot: CenterSnapshot { st.cache }
     var syncState: SyncState { st.outbox.isEmpty ? .synced : .pending(st.outbox.count) }
 
@@ -45,7 +52,7 @@ final class CloudRepository: AppRepository {
         api = SupabaseAPI(config: config)
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        fileURL = dir.appendingPathComponent("cloud_state.json")
+        fileURL = dir.appendingPathComponent("cloud_state_v3.json")
         if let data = try? Data(contentsOf: fileURL), let s = try? JSONDecoder().decode(CloudState.self, from: data) {
             st = s
         } else {
@@ -71,68 +78,110 @@ final class CloudRepository: AppRepository {
 
     private func publish() { onChange?() }
 
-    private func emailFor(_ phone: String) -> String { Phone.normalise(phone) + "@alsiddiq.app" }
-
     private func token() async throws -> String {
-        guard let s = st.session else { throw AppError.permissionDenied("سجّل الدخول أولاً") }
+        guard let s = st.session else { throw AppError.permissionDenied("اكتب كلمة السر أولاً") }
         if s.expiresAt.timeIntervalSinceNow > 60 { return s.accessToken }
         do {
             let fresh = try await api.refresh(s.refreshToken)
             st.session = fresh; save()
             return fresh.accessToken
         } catch let e as APIError {
-            if (400...499).contains(e.code) { st = CloudState(); save(); publish() }
+            if (400...499).contains(e.code) {
+                // This login was ended on the server (its password was changed): drop it.
+                if let b = st.baseSession, b != s {
+                    st.session = b; st.me = st.baseMe; st.baseSession = nil; st.baseMe = nil
+                    st.cache = CenterSnapshot(center: st.cache.center); st.outbox = []
+                } else {
+                    st = CloudState(centerName: st.centerName)
+                }
+                save(); publish()
+            }
             throw e
         }
     }
 
-    // MARK: First-time setup
+    // MARK: First-time setup + the «access» function
+    private func accessCall(_ body: JSON, token: String? = nil) async throws -> JSON {
+        do { return try await api.function(token: token, name: "access", body: body) }
+        catch is OfflineError { throw AppError.network("الدخول يحتاج اتصالاً بالإنترنت") }
+    }
+
     func needsSetup() async -> Bool? {
-        guard let r = try? await api.function(token: nil, name: "admin-members", body: ["action": "status"]) else { return nil }
+        guard let r = try? await api.function(token: nil, name: "access", body: ["action": "status"]) else { return nil }
+        if let n = r["center_name"] as? String, !n.isEmpty { st.centerName = n; save(); publish() }
         return (r["needs_setup"] as? NSNumber)?.boolValue
     }
 
-    func bootstrap(centerName: String, fullName: String, phone: String, password: String) async throws -> Member {
-        do {
-            _ = try await api.function(token: nil, name: "admin-members", body: [
-                "action": "bootstrap", "center_name": centerName, "full_name": fullName,
-                "phone": Phone.normalise(phone), "password": password
-            ])
-        } catch is OfflineError { throw AppError.network("لا يوجد اتصال بالإنترنت") }
-        return try await signIn(login: phone, password: password)
+    private func memberFrom(_ p: JSON) -> Member? {
+        guard let id = p["id"] as? String else { return nil }
+        let kind = (p["access_kind"] as? String) ?? (p["role"] as? String) ?? "viewer"
+        return Member(id: id, fullName: (p["full_name"] as? String) ?? "", role: Role(db: kind) ?? .viewer)
     }
 
-    // MARK: Auth
-    func signIn(login: String, password: String) async throws -> Member {
-        if Phone.normalise(login).count < 8 { throw AppError.validation("رقم الجوال غير صحيح") }
-        let s: Session
-        do { s = try await api.signIn(email: emailFor(login), password: password) }
-        catch is OfflineError { throw AppError.network("لا يوجد اتصال بالإنترنت") }
-        let rows = try await api.selectAll(token: s.accessToken, table: "profiles", query: "select=*&id=eq.\(s.userId)")
-        guard let prof = rows.first, let me = Rows.member(prof, [:]) else { throw AppError.validation("الحساب غير مكتمل، راجع إدارة المركز") }
-        if !me.active { throw AppError.validation("هذا الحساب موقوف، راجع إدارة المركز") }
-        st = CloudState(session: s, me: me, centerId: prof["center_id"] as? String)
+    /// Store a fresh login. keepBase = it was opened from Settings over the general view.
+    private func adopt(_ o: JSON, keepBase: Bool) async throws -> Member {
+        guard let sj = o["session"] as? JSON, let s = api.sessionFrom(sj),
+              let pj = o["profile"] as? JSON, let me = memberFrom(pj) else { throw AppError.network("استجابة غير متوقعة من الخادم") }
+        let name = (o["center_name"] as? String) ?? st.centerName
+        var base: Session? = nil
+        var baseMe: Member? = nil
+        if keepBase && me.role != .viewer {
+            if st.me?.role == .viewer { base = st.session; baseMe = st.me } else { base = st.baseSession; baseMe = st.baseMe }
+        }
+        st = CloudState(session: s, me: me, baseSession: base, baseMe: baseMe, centerName: name, centerId: nil)
         save()
+        if let rows = try? await api.selectAll(token: s.accessToken, table: "centers", query: "select=id"), let c = rows.first?["id"] as? String {
+            st.centerId = c; save()
+        }
         try? await reload()
         // Don't raise phone notifications for what was already waiting before this sign-in.
         st.seenNotificationIds = st.cache.notifications.map { $0.id }
         save(); publish()
-        Notifier.requestPermission()
         return st.me ?? me
     }
 
-    func signOut() async {
-        let t = st.session?.accessToken
-        st = CloudState(); save(); publish()
-        if let t = t { Task { await api.signOut(token: t) } }
+    func setup(centerName: String, adminPassword: String, viewerPassword: String, teacherPassword: String?) async throws -> Member {
+        let a = Passwords.normalise(adminPassword), v = Passwords.normalise(viewerPassword)
+        let t = teacherPassword.map { Passwords.normalise($0) } ?? ""
+        if let bad = Passwords.check(a) ?? Passwords.check(v) { throw AppError.validation(bad) }
+        if !t.isEmpty, let bad = Passwords.check(t) { throw AppError.validation(bad) }
+        if a == v { throw AppError.validation("كلمة سر الإدارة يجب أن تختلف عن كلمة السر العامة") }
+        if !t.isEmpty && (t == a || t == v) { throw AppError.validation("كلمة سر المعلمين يجب أن تختلف عن غيرها") }
+        var body: JSON = ["action": "setup", "center_name": centerName.trimmingCharacters(in: .whitespaces),
+                          "admin_password": a, "viewer_password": v]
+        if !t.isEmpty { body["teachers_password"] = t }
+        let o = try await accessCall(body)
+        return try await adopt(o, keepBase: false)
     }
 
-    func changePassword(old: String, new: String) async throws {
-        guard let me = st.me else { throw AppError.permissionDenied() }
-        if new.count < 6 { throw AppError.validation("كلمة المرور 6 أحرف على الأقل") }
-        do { _ = try await api.signIn(email: emailFor(me.phone), password: old) }
-        catch is APIError { throw AppError.validation("كلمة المرور الحالية غير صحيحة") }
-        try await api.updatePassword(token: try await token(), password: new)
+    // MARK: Auth
+    func signIn(password: String, kind: Role?) async throws -> Member {
+        let pw = Passwords.normalise(password)
+        if pw.isEmpty { throw AppError.validation("اكتب كلمة السر") }
+        let k: Any
+        switch kind { case .admin?: k = "admin"; case .teacher?: k = "teacher"; default: k = NSNull() }
+        let o = try await accessCall(["action": "login", "password": pw, "kind": k])
+        Notifier.requestPermission()
+        return try await adopt(o, keepBase: kind != nil)
+    }
+
+    func leaveRole() async {
+        let t = st.session?.accessToken
+        if let b = st.baseSession {
+            st.session = b; st.me = st.baseMe; st.baseSession = nil; st.baseMe = nil
+            st.cache = CenterSnapshot(center: st.cache.center); st.outbox = []
+        } else {
+            st = CloudState(centerName: st.centerName)
+        }
+        save(); publish()
+        if let t = t { Task { await api.signOut(token: t) } }
+        if st.session != nil { Task { try? await self.syncNow() } }
+    }
+
+    func signOut() async {
+        let ts = [st.session?.accessToken, st.baseSession?.accessToken].compactMap { $0 }
+        st = CloudState(centerName: st.centerName); save(); publish()
+        for t in ts { Task { await api.signOut(token: t) } }
     }
 
     // MARK: Sync
@@ -152,7 +201,6 @@ final class CloudRepository: AppRepository {
         guard let me = st.me else { return }
         async let centers = api.selectAll(token: t, table: "centers")
         async let profiles = api.selectAll(token: t, table: "profiles")
-        async let links = api.selectAll(token: t, table: "parent_students")
         async let circles = api.selectAll(token: t, table: "circles", query: "select=*&order=name")
         async let students = api.selectAll(token: t, table: "students", query: "select=*&order=full_name")
         async let recs = api.selectAll(token: t, table: "recitations", query: "select=*&order=recorded_at.desc")
@@ -161,11 +209,7 @@ final class CloudRepository: AppRepository {
         async let ann = api.selectAll(token: t, table: "announcements", query: "select=*&order=created_at.desc")
         async let notes = api.selectAll(token: t, table: "notifications", query: "select=*&user_id=eq.\(me.id)&order=created_at.desc")
 
-        var children: [String: [String]] = [:]
-        for l in try await links {
-            if let p = l["parent_id"] as? String, let s = l["student_id"] as? String { children[p, default: []].append(s) }
-        }
-        let members = (try await profiles).compactMap { Rows.member($0, children) }
+        let members = (try await profiles).compactMap { Rows.member($0) }
         var fresh = CenterSnapshot()
         fresh.center = (try await centers).first.map { Rows.center($0) } ?? CenterInfo()
         fresh.members = members
@@ -274,44 +318,34 @@ final class CloudRepository: AppRepository {
     }
 
     private func adminFunction(_ body: JSON) async throws -> JSON {
-        do { return try await api.function(token: try await token(), name: "admin-members", body: body) }
-        catch is OfflineError { throw AppError.network("إدارة الحسابات تحتاج اتصالاً بالإنترنت") }
+        do { return try await api.function(token: try await token(), name: "access", body: body) }
+        catch is OfflineError { throw AppError.network("هذه العملية تحتاج اتصالاً بالإنترنت") }
     }
 
-    func createMember(_ m: NewMember) async throws -> Member {
-        try require(Permissions.canManageMembers(try me()))
-        if m.fullName.trimmingCharacters(in: .whitespaces).isEmpty { throw AppError.validation("اكتب الاسم") }
-        if Phone.normalise(m.phone).count < 8 { throw AppError.validation("رقم الجوال غير صحيح") }
-        if m.password.count < 6 { throw AppError.validation("كلمة المرور 6 أحرف على الأقل") }
-        let res = try await adminFunction([
-            "action": "create", "full_name": m.fullName.trimmingCharacters(in: .whitespaces), "phone": Phone.normalise(m.phone),
-            "role": m.role.dbValue, "password": m.password, "student_id": opt(m.studentId), "child_ids": m.childIds
-        ])
-        guard let prof = res["profile"] as? JSON, let pid = prof["id"] as? String, let member = Rows.member(prof, [pid: m.childIds]) else {
-            throw AppError.validation("تعذّر إنشاء الحساب")
-        }
-        st.cache.members.append(member); save(); publish()
-        Task { try? await self.syncNow() }
-        return member
+    func setAccessPassword(target: Role, password: String) async throws {
+        try require(Permissions.canManagePasswords(try me()))
+        let pw = Passwords.normalise(password)
+        if let bad = Passwords.check(pw) { throw AppError.validation(bad) }
+        _ = try await adminFunction(["action": "set_password", "target": target.dbValue, "password": pw])
     }
 
-    func updateMember(_ m: Member) async throws {
-        try require(Permissions.canManageMembers(try me()))
-        _ = try await adminFunction([
-            "action": "update", "id": m.id, "full_name": m.fullName, "phone": Phone.normalise(m.phone), "active": m.active,
-            "student_id": opt(m.studentId), "child_ids": m.childIds
-        ])
-        st.cache.members = st.cache.members.map { $0.id == m.id ? m : $0 }
-        if st.me?.id == m.id { st.me = m }
-        save(); publish()
-        Task { try? await self.syncNow() }
+    // TEACHER_NAMES_BEGIN
+    func saveTeacherName(id: String?, name: String) async throws {
+        throw AppError.validation("غير متاح بعد")
     }
 
-    func resetMemberPassword(memberId: String, newPassword: String) async throws {
-        try require(Permissions.canManageMembers(try me()))
-        if newPassword.count < 6 { throw AppError.validation("كلمة المرور 6 أحرف على الأقل") }
-        _ = try await adminFunction(["action": "reset_password", "id": memberId, "password": newPassword])
+    func removeTeacherName(_ id: String) async throws {
+        throw AppError.validation("غير متاح بعد")
     }
+    // TEACHER_NAMES_END
+
+    // PHOTOS_BEGIN
+    func setStudentPhoto(studentId: String, jpeg: Data?) async throws {
+        throw AppError.validation("غير متاح بعد")
+    }
+
+    func photo(_ s: Student) async -> UIImage? { nil }
+    // PHOTOS_END
 
     func saveCircle(_ c: StudyCircle) async throws -> StudyCircle {
         try require(Permissions.canManageCircles(try me()))
@@ -333,7 +367,7 @@ final class CloudRepository: AppRepository {
     }
 
     func saveStudent(_ s: Student) async throws -> Student {
-        try require(Permissions.canManageStudents(try me()))
+        try require(Permissions.canEditStudent(try me(), s, st.cache))
         if s.fullName.trimmingCharacters(in: .whitespaces).isEmpty { throw AppError.validation("اكتب اسم الطالب") }
         var saved = s
         if saved.id.isEmpty { saved.id = newId() }
@@ -344,7 +378,7 @@ final class CloudRepository: AppRepository {
     }
 
     func deleteStudent(_ id: String) async throws {
-        try require(Permissions.canManageStudents(try me()))
+        try require(Permissions.canDeleteStudents(try me()))
         _ = try await write(PendingOp(type: "delete", table: "students", filter: "id=eq.\(id)"), ()) { d in
             d.students.removeAll { $0.id == id }
             d.recitations.removeAll { $0.studentId == id }
@@ -377,7 +411,8 @@ final class CloudRepository: AppRepository {
         let u = try me()
         let d = st.cache
         guard let circle = d.circle(circleId) else { throw AppError.validation("الحلقة غير موجودة") }
-        try require(u.role == .admin || Permissions.teachesCircle(u, circle))
+        try require(Permissions.canTakeAttendance(u))
+        _ = circle
         let c = try center()
         let now = Rows.iso(Date())
         let rows: [JSON] = marks.map { sid, s in

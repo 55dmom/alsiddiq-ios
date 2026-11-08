@@ -161,6 +161,32 @@ struct Avatar: View {
     }
 }
 
+/// A student's round photo, or their initial when there is none (v3.1).
+struct StudentAvatar: View {
+    let s: Student
+    var size: CGFloat = 44
+    var color: Color = Brand.navy
+    @EnvironmentObject var model: AppModel
+    @State private var img: UIImage?
+    var body: some View {
+        ZStack {
+            if let img = img {
+                Image(uiImage: img).resizable().scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(SwiftUI.Circle())
+                    .overlay(SwiftUI.Circle().stroke(Brand.gold.opacity(0.55), lineWidth: 1.5))
+            } else {
+                Avatar(name: s.fullName, size: size, color: color)
+            }
+        }
+        .frame(width: size, height: size)
+        .task(id: s.photoPath ?? "-") {
+            if s.photoPath == nil { img = nil; return }
+            img = await model.repo.photo(s)
+        }
+    }
+}
+
 struct Pill: View {
     let text: String
     let color: Color

@@ -43,27 +43,31 @@ struct RootView: View {
         .preferredColorScheme(.light)
         .task {
             await handleAutoLogin()
-            try? await Task.sleep(nanoseconds: autoLogin == nil ? 900_000_000 : 300_000_000)
+            try? await Task.sleep(nanoseconds: autoLogin == nil ? 1_800_000_000 : 300_000_000)
             withAnimation { splash = false }
         }
     }
 
+    /// CI only: "-ciLogin admin|teacher|viewer" with "-ciPass" (and "-ciViewerPass" kept underneath); demo passwords when omitted.
     private func handleAutoLogin() async {
         guard let who = autoLogin else { return }
         if who == "login" || who == "none" {
             if model.user != nil { await model.repo.signOut(); model.pull() }
             return
         }
-        let phone: String?
-        switch who {
-        case "admin": phone = DemoSeed.adminPhone
-        case "teacher": phone = DemoSeed.teacherPhone
-        case "student": phone = DemoSeed.studentPhone
-        case "parent": phone = DemoSeed.parentPhone
-        default: phone = nil
+        let d = UserDefaults.standard
+        let kind: Role? = who == "admin" ? .admin : (who == "teacher" ? .teacher : (who == "viewer" ? .viewer : nil))
+        guard let k = kind else { return }
+        let pass = d.string(forKey: "ciPass") ?? (k == .admin ? DemoSeed.adminPassword : (k == .teacher ? DemoSeed.teacherPassword : DemoSeed.viewerPassword))
+        let viewerPass = d.string(forKey: "ciViewerPass") ?? DemoSeed.viewerPassword
+        if model.user?.role == k { return }
+        await model.repo.signOut()
+        if k != .viewer {
+            if (try? await model.repo.signIn(password: viewerPass, kind: nil)) == nil { NSLog("ALSIDDIQ_CI viewer sign-in failed") }
+            do { _ = try await model.repo.signIn(password: pass, kind: k) } catch { NSLog("ALSIDDIQ_CI sign-in \(who) failed: \(error.localizedDescription)") }
+        } else {
+            do { _ = try await model.repo.signIn(password: pass, kind: nil) } catch { NSLog("ALSIDDIQ_CI viewer failed: \(error.localizedDescription)") }
         }
-        guard model.isDemo, let p = phone else { return }
-        if model.user?.phone != p { _ = try? await model.repo.signIn(login: p, password: DemoSeed.demoPassword) }
         model.pull()
     }
 }
@@ -75,14 +79,37 @@ enum StatusBar {
     }
 }
 
+/// Animated splash: the ORIGINAL logo (never redrawn) rises in, a gold glow breathes behind it
+/// like light from the dome, then the welcome line.
 struct SplashView: View {
+    @State private var appear = false
+    @State private var glow = false
+    @State private var line = false
     var body: some View {
-        VStack(spacing: 18) {
-            Image("Logo").resizable().scaledToFit().frame(width: 180, height: 180)
-            ProgressView().tint(Brand.navy).scaleEffect(1.1)
+        ZStack {
+            LinearGradient(colors: [Color.white, Brand.goldSoft.opacity(0.6)], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            VStack(spacing: 22) {
+                ZStack {
+                    RadialGradient(colors: [Brand.gold.opacity(glow ? 0.55 : 0.18), Brand.gold.opacity(0)], center: .center, startRadius: 10, endRadius: glow ? 150 : 90)
+                        .frame(width: 320, height: 320)
+                    Image("Logo").resizable().scaledToFit().frame(width: 190, height: 190)
+                        .scaleEffect(appear ? 1 : 0.82)
+                        .opacity(appear ? 1 : 0)
+                }
+                .frame(height: 260)
+                VStack(spacing: 6) {
+                    Text("أهلاً بكم في مركز الصديق").font(T.headlineSmall).foregroundColor(Brand.navy)
+                    Text("«خيركم من تعلّم القرآن وعلّمه»").font(T.bodyLarge).foregroundColor(Brand.maroon)
+                }
+                .opacity(line ? 1 : 0)
+                .offset(y: line ? 0 : 12)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white.ignoresSafeArea())
+        .onAppear {
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) { appear = true }
+            withAnimation(.easeInOut(duration: 1.1).delay(0.25).repeatForever(autoreverses: true)) { glow = true }
+            withAnimation(.easeOut(duration: 0.6).delay(0.55)) { line = true }
+        }
     }
 }
 
@@ -134,7 +161,10 @@ struct MainShell: View {
     }
 
     private func updateStatusBar() {
-        StatusBar.set(light: router.stack.isEmpty && router.tabs[router.tab].route == .home)
+        let top = router.stack.last
+        var light = router.stack.isEmpty && router.tabs[router.tab].route == .home
+        if case .roleLogin? = top { light = true }
+        StatusBar.set(light: light)
     }
 
     @ViewBuilder
@@ -144,17 +174,17 @@ struct MainShell: View {
             switch user.role {
             case .admin: AdminHome(user: user)
             case .teacher: TeacherHome(user: user)
-            case .student: StudentHome(user: user)
-            case .parent: ParentHome(user: user)
+            case .viewer: ViewerHome(user: user)
             }
         case .circles: CirclesScreen(user: user)
         case .students: StudentsScreen(user: user)
         case .reports: ReportsScreen(user: user)
         case .more: MoreScreen(user: user)
+        case .teacherMore: TeacherMoreScreen(user: user)
+        case .viewerSettings: ViewerSettingsScreen(user: user)
         case .recordStart: RecordStartScreen(user: user)
         case .attendance(let cid): AttendanceScreen(user: user, circleId: cid)
-        case .profile: ProfileScreen(user: user)
-        case .history(let sid): HistoryScreen(user: user, studentId: sid ?? user.studentId)
+        case .history(let sid): HistoryScreen(user: user, studentId: sid ?? "")
         case .rewards: RewardsScreen(user: user)
         case .notifications: NotificationsScreen(user: user)
         case .circle(let id): CircleDetailScreen(user: user, id: id)
@@ -162,12 +192,14 @@ struct MainShell: View {
         case .student(let id): StudentDetailScreen(user: user, id: id)
         case .studentEdit(let id, let c): StudentEditScreen(user: user, id: id, presetCircle: c)
         case .record(let sid): RecordScreen(user: user, studentId: sid).id("record-" + sid)
-        case .members(let role): MembersScreen(user: user, role: role)
-        case .memberEdit(let role, let id): MemberEditScreen(user: user, role: role, id: id)
         case .announcements: AnnouncementsScreen(user: user)
         case .announceNew: AnnounceNewScreen(user: user)
-        case .settings: CenterSettingsScreen(user: user)
+        case .centerSettings: CenterSettingsScreen(user: user)
         case .about: AboutScreen()
+        case .passwords: PasswordsScreen(user: user)
+        case .teacherNames: TeacherNamesScreen(user: user)
+        case .circleReport(let cid): CircleReportScreen(user: user, circleId: cid)
+        case .roleLogin(let k): RoleLoginView(kind: k) { router.back() }
         }
     }
 }

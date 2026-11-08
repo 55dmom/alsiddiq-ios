@@ -4,8 +4,7 @@ struct AttendanceScreen: View {
     let user: Member
     let circleId: String?
     var body: some View {
-        if user.role == .parent || user.role == .student { AttendanceHistory(user: user) }
-        else { AttendanceTaking(user: user, circleId: circleId) }
+        AttendanceTaking(user: user, circleId: circleId)
     }
 }
 
@@ -165,7 +164,7 @@ struct ReportsScreen: View {
         let snap = model.snap
         let visible = Permissions.visibleStudents(user, snap)
         let circles = Permissions.visibleCircles(user, snap)
-        let isParent = user.role == .parent
+        let isParent = false
         let scopeOptions = isParent ? visible.map { $0.fullName } : ["المركز كاملاً"] + circles.map { $0.name }
         let students = scopedStudents(visible, circles, isParent)
         let since = Days.add(Days.today, -(ranges[rangeIdx].0 - 1))

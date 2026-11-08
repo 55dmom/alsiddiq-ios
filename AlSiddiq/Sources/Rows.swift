@@ -50,7 +50,7 @@ struct CircleCard: View {
                 IconBadge(icon: "person.3.fill", tint: Brand.navy, size: 46, corner: 14)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(c.name).font(T.titleSmall).foregroundColor(Brand.ink)
-                    Text(snap.member(c.teacherId)?.fullName ?? "بدون معلم").font(T.bodySmall).foregroundColor(Brand.muted)
+                    Text(snap.teacherName(of: c) ?? "بدون معلم").font(T.bodySmall).foregroundColor(Brand.muted)
                     if !c.schedule.isEmpty { Text(c.schedule).font(T.labelSmall).foregroundColor(Brand.muted) }
                 }
                 Spacer()
@@ -79,7 +79,7 @@ struct StudentRow<Trailing: View>: View {
         let stats = Stats.forStudent(s, snap)
         AppCard(padding: 12, onTap: onTap) {
             HStack(spacing: 12) {
-                Avatar(name: s.fullName)
+                StudentAvatar(s: s)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(s.fullName).font(T.titleSmall).foregroundColor(Brand.ink)
                     Text("\(snap.circle(s.circleId)?.name ?? "بدون حلقة") • \(Fmt.one(stats.juzEquivalent)) جزء")
@@ -106,7 +106,7 @@ struct RecordRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(showStudent ? (snap.student(r.studentId)?.fullName ?? "") : r.kind.label).font(T.titleSmall).foregroundColor(Brand.ink)
                     Text(Stats.describeRange(r) + " • \(Stats.ayatOf(r)) آية").font(T.bodySmall).foregroundColor(Brand.muted)
-                    Text(Fmt.relative(r.recordedAt) + (r.mistakes > 0 ? " • \(r.mistakes) أخطاء" : "")).font(T.labelSmall).foregroundColor(Brand.muted)
+                    Text(Fmt.relative(r.recordedAt) + (r.mistakes > 0 ? " • \(r.mistakes) أخطاء" : "") + (r.byName.isEmpty ? "" : " • \(r.byName)")).font(T.labelSmall).foregroundColor(Brand.muted)
                     if !r.notes.isEmpty { Text(r.notes).font(T.bodySmall).foregroundColor(Brand.ink) }
                 }
                 Spacer()

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Where the data lives. The UI only ever talks to this interface.
 enum BackendMode { case demo, cloud }
@@ -7,36 +8,53 @@ enum SyncState: Equatable {
     case localOnly, synced, pending(Int), error(String)
 }
 
-/// Same shape as the Android app's AuthRepository + CenterRepository.
+/// v3 access (same as the Android app): there are no usernames or phone numbers. One password field;
+/// the server decides whose password it is — the general (viewer) password, the admin password,
+/// or the teachers' password. Students exist only as records managed by the admin and the teachers.
 @MainActor
 protocol AppRepository: AnyObject {
     var mode: BackendMode { get }
+    /// Who is using the app right now (viewer, teachers or the admin).
     var currentUser: Member? { get }
+    /// The general (viewer) login kept underneath while the admin/teachers section is open from Settings.
+    var baseUser: Member? { get }
+    /// The centre name shown on the password screen (cached).
+    var centerName: String { get }
     /// Everything the current user is allowed to see; `onChange` fires when it moves.
     var snapshot: CenterSnapshot { get }
     var syncState: SyncState { get }
     var onChange: (() -> Void)? { get set }
 
-    // First-time setup of a brand-new central database (cloud only)
+    /// True when no admin password exists yet (first-time setup). nil = unknown (offline).
     func needsSetup() async -> Bool?
-    func bootstrap(centerName: String, fullName: String, phone: String, password: String) async throws -> Member
+    /// First run: centre name + admin password + general password (+ the teachers' password when the server takes it).
+    func setup(centerName: String, adminPassword: String, viewerPassword: String, teacherPassword: String?) async throws -> Member
 
-    // Auth
-    func signIn(login: String, password: String) async throws -> Member
+    /// kind = nil: the opening screen (any password). kind = .admin / .teacher: the Settings buttons
+    /// «الإدارة» / «المعلمين» (only that kind is accepted); the general view stays underneath.
+    func signIn(password: String, kind: Role?) async throws -> Member
+    /// Leave the admin/teachers section and return to the general view (or the password screen if none).
+    func leaveRole() async
+    /// Forget every session on this phone.
     func signOut() async
-    func changePassword(old: String, new: String) async throws
 
     func refresh() async throws
 
-    // Admin: center, members, circles, students
+    // Admin: centre, passwords, teacher names, circles, students
     func updateCenter(_ info: CenterInfo) async throws
-    func createMember(_ m: NewMember) async throws -> Member
-    func updateMember(_ m: Member) async throws
-    func resetMemberPassword(memberId: String, newPassword: String) async throws
+    /// Change the general (.viewer), the .admin or the shared .teacher password.
+    func setAccessPassword(target: Role, password: String) async throws
+    /// The admin's list of teacher NAMES (for "who recorded"); no passwords.
+    func saveTeacherName(id: String?, name: String) async throws
+    func removeTeacherName(_ id: String) async throws
     func saveCircle(_ c: StudyCircle) async throws -> StudyCircle
     func deleteCircle(_ id: String) async throws
     func saveStudent(_ s: Student) async throws -> Student
     func deleteStudent(_ id: String) async throws
+    /// Set (jpeg) or remove (nil) the student's photo.
+    func setStudentPhoto(studentId: String, jpeg: Data?) async throws
+    /// The student's photo, cached on the phone.
+    func photo(_ s: Student) async -> UIImage?
 
     // Teaching
     func logRecitation(_ r: Recitation) async throws -> Recitation
@@ -44,7 +62,7 @@ protocol AppRepository: AnyObject {
     func saveAttendance(circleId: String, day: String, marks: [String: AttendanceStatus]) async throws -> Int
     func giveReward(_ r: Reward) async throws -> Reward
 
-    // Communication
+    // Communication (the teachers' «تقرير اليوم» is an announcement to everyone)
     func postAnnouncement(_ a: Announcement) async throws -> Announcement
     func deleteAnnouncement(_ id: String) async throws
     func markNotificationRead(_ id: String) async throws
@@ -59,5 +77,39 @@ enum Phone {
             if let v = ch.wholeNumberValue, ch.isNumber { out.append(String(v)) }
         }
         return out
+    }
+}
+
+enum Passwords {
+    /// Arabic-Indic (and Persian) digits typed on an Arabic keyboard count as the same password as 0–9 (same as the server).
+    static func normalise(_ p: String) -> String {
+        var out = ""
+        for ch in p {
+            if let s = ch.unicodeScalars.first, ch.unicodeScalars.count == 1 {
+                let v = s.value
+                if v >= 0x0660 && v <= 0x0669 { out.append(String(v - 0x0660)); continue }
+                if v >= 0x06F0 && v <= 0x06F9 { out.append(String(v - 0x06F0)); continue }
+            }
+            out.append(ch)
+        }
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    static let minLength = 6
+    static func check(_ p: String) -> String? {
+        p.count < minLength ? "كلمة السر 6 أحرف أو أرقام على الأقل" : nil
+    }
+}
+
+/// Photos: about 512 px on the long side, JPEG.
+enum PhotoTools {
+    static func jpeg512(_ image: UIImage) -> Data? {
+        let maxSide: CGFloat = 512
+        let s = image.size
+        let scale = min(1, maxSide / max(s.width, s.height, 1))
+        let target = CGSize(width: max(1, (s.width * scale).rounded()), height: max(1, (s.height * scale).rounded()))
+        let fmt = UIGraphicsImageRendererFormat.default()
+        fmt.scale = 1
+        let img = UIGraphicsImageRenderer(size: target, format: fmt).image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
+        return img.jpegData(compressionQuality: 0.8)
     }
 }

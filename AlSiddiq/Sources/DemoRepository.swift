@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Local-only store used until the central database is connected. It persists to a
 /// file on the device and applies the same permission rules the server enforces,
@@ -45,30 +46,10 @@ final class DemoRepository: AppRepository {
     private func visibleTo(_ user: Member?) -> CenterSnapshot {
         let all = store.data
         guard let user = user else { return CenterSnapshot(center: all.center) }
-        if user.role == .admin {
-            var s = all
-            s.notifications = all.notifications.filter { $0.userId == user.id }
-            return s
-        }
-        let students = Permissions.visibleStudents(user, all)
-        let ids = Set(students.map { $0.id })
-        let circles = Permissions.visibleCircles(user, all)
-        var memberIds: Set<String> = [user.id]
-        circles.compactMap { $0.teacherId }.forEach { memberIds.insert($0) }
-        if user.role == .teacher {
-            all.members.filter { m in m.role == .parent && m.childIds.contains { ids.contains($0) } }.forEach { memberIds.insert($0.id) }
-        }
-        return CenterSnapshot(
-            center: all.center,
-            members: all.members.filter { memberIds.contains($0.id) },
-            circles: circles,
-            students: students,
-            recitations: all.recitations.filter { ids.contains($0.studentId) },
-            attendance: all.attendance.filter { ids.contains($0.studentId) },
-            rewards: all.rewards.filter { ids.contains($0.studentId) },
-            announcements: all.announcements.filter { Permissions.audienceIncludes($0.audience, user.role) },
-            notifications: all.notifications.filter { $0.userId == user.id }
-        )
+        var s = all
+        s.announcements = all.announcements.filter { Permissions.audienceIncludes($0.audience, user.role) }
+        s.notifications = all.notifications.filter { $0.userId == user.id }
+        return s
     }
 
     private func requireUser() throws -> Member {
@@ -88,38 +69,43 @@ final class DemoRepository: AppRepository {
         return v
     }
 
-    // MARK: Setup (not used in demo mode)
+    var baseUser: Member? { store.data.member(store.baseUserId) }
+    var centerName: String { store.data.center.name }
+
+    // MARK: Setup (the demo store is already set up)
     func needsSetup() async -> Bool? { false }
-    func bootstrap(centerName: String, fullName: String, phone: String, password: String) async throws -> Member {
+    func setup(centerName: String, adminPassword: String, viewerPassword: String, teacherPassword: String?) async throws -> Member {
         throw AppError.validation("الإعداد الأول متاح فقط مع قاعدة البيانات المركزية")
     }
 
-    // MARK: Auth
-    func signIn(login: String, password: String) async throws -> Member {
-        let key = Phone.normalise(login)
-        guard !key.isEmpty, let m = store.data.members.first(where: { Phone.normalise($0.phone) == key }) else {
-            throw AppError.validation("لا يوجد حساب بهذا الرقم")
+    // MARK: Auth (one password field; the password decides who you are)
+    func signIn(password: String, kind: Role?) async throws -> Member {
+        let pw = Passwords.normalise(password)
+        if pw.isEmpty { throw AppError.validation("اكتب كلمة السر") }
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard let m = store.data.members.first(where: { $0.active && store.passwordHashes[$0.id] == sha256(pw) && (kind == nil || $0.role == kind) }) else {
+            throw AppError.validation("كلمة السر غير صحيحة")
         }
-        guard m.active else { throw AppError.validation("هذا الحساب موقوف، راجع إدارة المركز") }
-        guard store.passwordHashes[m.id] == sha256(password) else { throw AppError.validation("كلمة المرور غير صحيحة") }
+        if kind != nil, let cur = currentUser, cur.role == .viewer, m.role != .viewer { store.baseUserId = cur.id }
+        if m.role == .viewer { store.baseUserId = nil }
         store.currentUserId = m.id
         currentUser = m
         persist(); publish()
         return m
     }
 
-    func signOut() async {
-        store.currentUserId = nil
-        currentUser = nil
+    func leaveRole() async {
+        store.currentUserId = store.baseUserId
+        store.baseUserId = nil
+        currentUser = store.data.member(store.currentUserId)
         persist(); publish()
     }
 
-    func changePassword(old: String, new: String) async throws {
-        let u = try requireUser()
-        guard store.passwordHashes[u.id] == sha256(old) else { throw AppError.validation("كلمة المرور الحالية غير صحيحة") }
-        guard new.count >= 6 else { throw AppError.validation("كلمة المرور 6 أحرف على الأقل") }
-        store.passwordHashes[u.id] = sha256(new)
-        persist()
+    func signOut() async {
+        store.currentUserId = nil
+        store.baseUserId = nil
+        currentUser = nil
+        persist(); publish()
     }
 
     func refresh() async throws { publish() }
@@ -129,37 +115,50 @@ final class DemoRepository: AppRepository {
         try mutate { d, u in try require(Permissions.canManageCenter(u)); d.center = info }
     }
 
-    func createMember(_ m: NewMember) async throws -> Member {
+    func setAccessPassword(target: Role, password: String) async throws {
         let u = try requireUser()
-        try require(Permissions.canManageMembers(u))
-        let phone = Phone.normalise(m.phone)
-        if m.fullName.trimmingCharacters(in: .whitespaces).isEmpty { throw AppError.validation("اكتب الاسم") }
-        if phone.count < 8 { throw AppError.validation("رقم الجوال غير صحيح") }
-        if store.data.members.contains(where: { Phone.normalise($0.phone) == phone }) { throw AppError.validation("هذا الرقم مسجّل مسبقاً") }
-        if m.password.count < 6 { throw AppError.validation("كلمة المرور 6 أحرف على الأقل") }
-        let member = Member(id: newId(), fullName: m.fullName.trimmingCharacters(in: .whitespaces), phone: phone, role: m.role,
-                            active: true, studentId: m.studentId, childIds: m.childIds)
-        store.data.members.append(member)
-        store.passwordHashes[member.id] = sha256(m.password)
-        persist(); publish()
-        return member
-    }
-
-    func updateMember(_ m: Member) async throws {
-        try mutate { d, u in
-            try require(Permissions.canManageMembers(u))
-            if m.id == u.id && m.role != u.role { throw AppError.validation("لا يمكنك تغيير دورك بنفسك") }
-            d.members = d.members.map { $0.id == m.id ? m : $0 }
+        try require(Permissions.canManagePasswords(u))
+        let pw = Passwords.normalise(password)
+        if let bad = Passwords.check(pw) { throw AppError.validation(bad) }
+        guard let acc = store.data.members.first(where: { $0.role == target }) else { throw AppError.validation("الحساب غير موجود") }
+        if store.passwordHashes.contains(where: { $0.key != acc.id && $0.value == sha256(pw) }) {
+            throw AppError.validation("كلمة السر هذي مستخدمة لحساب ثاني، اختر غيرها")
         }
-        if m.id == currentUser?.id { currentUser = m; publish() }
+        store.passwordHashes[acc.id] = sha256(pw)
+        persist()
     }
 
-    func resetMemberPassword(memberId: String, newPassword: String) async throws {
-        let u = try requireUser()
-        try require(Permissions.canManageMembers(u))
-        guard newPassword.count >= 6 else { throw AppError.validation("كلمة المرور 6 أحرف على الأقل") }
-        store.passwordHashes[memberId] = sha256(newPassword)
-        persist()
+    func saveTeacherName(id: String?, name: String) async throws {
+        try mutate { d, u in
+            try require(Permissions.canManageCenter(u))
+            let n = name.trimmingCharacters(in: .whitespaces)
+            if n.isEmpty { throw AppError.validation("اكتب اسم المعلم") }
+            if let id = id, let i = d.teacherNames.firstIndex(where: { $0.id == id }) { d.teacherNames[i].name = n }
+            else { d.teacherNames.append(TeacherName(id: newId(), name: n)) }
+        }
+    }
+
+    func removeTeacherName(_ id: String) async throws {
+        try mutate { d, u in
+            try require(Permissions.canManageCenter(u))
+            d.teacherNames = d.teacherNames.map { var t = $0; if t.id == id { t.active = false }; return t }
+            _ = id
+        }
+    }
+
+    func setStudentPhoto(studentId: String, jpeg: Data?) async throws {
+        try mutate { d, u in
+            guard let i = d.students.firstIndex(where: { $0.id == studentId }) else { throw AppError.validation("الطالب غير موجود") }
+            try require(Permissions.canEditStudent(u, d.students[i], d))
+            d.students[i].photoPath = jpeg == nil ? nil : "demo/\(studentId)-\(Int(Date().timeIntervalSince1970)).jpg"
+        }
+        store.photos[studentId] = jpeg
+        persist(); publish()
+    }
+
+    func photo(_ s: Student) async -> UIImage? {
+        guard s.photoPath != nil, let d = store.photos[s.id] else { return nil }
+        return UIImage(data: d)
     }
 
     func saveCircle(_ c: StudyCircle) async throws -> StudyCircle {
@@ -183,7 +182,7 @@ final class DemoRepository: AppRepository {
 
     func saveStudent(_ s: Student) async throws -> Student {
         try mutate { d, u in
-            try require(Permissions.canManageStudents(u))
+            try require(Permissions.canEditStudent(u, s, d))
             if s.fullName.trimmingCharacters(in: .whitespaces).isEmpty { throw AppError.validation("اكتب اسم الطالب") }
             var saved = s
             if saved.id.isEmpty { saved.id = newId() }
@@ -194,12 +193,11 @@ final class DemoRepository: AppRepository {
 
     func deleteStudent(_ id: String) async throws {
         try mutate { d, u in
-            try require(Permissions.canManageStudents(u))
+            try require(Permissions.canDeleteStudents(u))
             d.students.removeAll { $0.id == id }
             d.recitations.removeAll { $0.studentId == id }
             d.attendance.removeAll { $0.studentId == id }
             d.rewards.removeAll { $0.studentId == id }
-            d.members = d.members.map { var m = $0; m.childIds.removeAll { $0 == id }; return m }
         }
     }
 
@@ -215,10 +213,7 @@ final class DemoRepository: AppRepository {
             if saved.id.isEmpty { saved.id = newId() }
             saved.teacherId = u.id
             saved.circleId = student.circleId
-            let title = "\(saved.kind.label): \(student.fullName)"
-            let body = "\(Stats.describeRange(saved)) • \(ayat) آية • \(saved.grade.label)"
             d.recitations.append(saved)
-            d.notifications += notify(recipientsFor(d, student.id), title, body, "record", saved.id)
             return saved
         }
     }
@@ -235,14 +230,11 @@ final class DemoRepository: AppRepository {
     func saveAttendance(circleId: String, day: String, marks: [String: AttendanceStatus]) async throws -> Int {
         try mutate { d, u in
             guard let circle = d.circle(circleId) else { throw AppError.validation("الحلقة غير موجودة") }
-            try require(u.role == .admin || Permissions.teachesCircle(u, circle))
+            try require(Permissions.canTakeAttendance(u))
             d.attendance.removeAll { $0.day == day && marks.keys.contains($0.studentId) }
             let added = marks.map { Attendance(id: newId(), studentId: $0.key, circleId: circleId, day: day, status: $0.value, recordedBy: u.id) }
             d.attendance += added
-            for (sid, st) in marks where st == .absent {
-                let s = d.student(sid)
-                d.notifications += notify(d.parentsOf(sid).map { $0.id }, "غياب \(s?.fullName ?? "")", "سُجّل غياب في \(circle.name) بتاريخ \(day)", "absence", sid)
-            }
+            _ = circle
             return added.count
         }
     }
@@ -256,7 +248,6 @@ final class DemoRepository: AppRepository {
             if saved.id.isEmpty { saved.id = newId() }
             saved.awardedBy = u.id
             d.rewards.append(saved)
-            d.notifications += notify(recipientsFor(d, student.id), "مكافأة \(student.fullName) 🎉", "+\(r.points) نقطة: \(r.reason)", "reward", saved.id)
             return saved
         }
     }
@@ -279,7 +270,7 @@ final class DemoRepository: AppRepository {
     func deleteAnnouncement(_ id: String) async throws {
         try mutate { d, u in
             guard let a = d.announcements.first(where: { $0.id == id }) else { throw AppError.validation("الإعلان غير موجود") }
-            try require(u.role == .admin || a.createdBy == u.id)
+            try require(u.role == .admin || (u.role == .teacher && a.createdBy == u.id))
             d.announcements.removeAll { $0.id == id }
         }
     }
@@ -290,10 +281,6 @@ final class DemoRepository: AppRepository {
 
     func markAllNotificationsRead() async throws {
         try mutate { d, u in d.notifications = d.notifications.map { var n = $0; if n.userId == u.id { n.read = true }; return n } }
-    }
-
-    private func recipientsFor(_ d: CenterSnapshot, _ studentId: String) -> [String] {
-        d.parentsOf(studentId).map { $0.id } + d.members.filter { $0.role == .student && $0.studentId == studentId }.map { $0.id }
     }
 
     private func notify(_ userIds: [String], _ title: String, _ body: String, _ kind: String, _ ref: String?) -> [AppNotification] {

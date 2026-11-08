@@ -20,7 +20,7 @@ struct RecordStartScreen: View {
                 Spacer()
                 Text("سُجّل اليوم \(students.filter { logged.contains($0.id) }.count)/\(students.count)").font(T.labelMedium).foregroundColor(Brand.green)
             }
-            if circles.isEmpty { EmptyState(title: "لا توجد حلقات", message: "لم تُسند إليك حلقة بعد") }
+            if circles.isEmpty { EmptyState(title: "لا توجد حلقات", message: "تنشئها الإدارة من الإعدادات ← الإدارة") }
             else if students.isEmpty { EmptyState(title: "لا يوجد طلاب", message: "هذه الحلقة بلا طلاب بعد") }
             ForEach(students) { s in
                 StudentRow(s: s, snap: snap, onTap: { router.go(.record(s.id)) }) {
@@ -49,6 +49,8 @@ struct RecordScreen: View {
     @State private var mistakes = 0
     @State private var notes = ""
     @State private var saving = false
+    /// v3.1: "who recorded" (optional), remembered on this phone.
+    @AppStorage("recordedByName") private var byName = ""
 
     private func lastHifz(_ snap: CenterSnapshot) -> Recitation? {
         snap.recitations.filter { $0.studentId == studentId && $0.kind == .hifz }.max { $0.recordedAt < $1.recordedAt }
@@ -93,7 +95,8 @@ struct RecordScreen: View {
             guard let g = grade else { return }
             saving = true
             let r = Recitation(id: "", studentId: s.id, circleId: s.circleId, teacherId: user.id, kind: kind, fromSurah: fromSurah, fromAyah: fa,
-                               toSurah: toSurah, toAyah: ta, grade: g, mistakes: mistakes, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
+                               toSurah: toSurah, toAyah: ta, grade: g, mistakes: mistakes, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                               byName: byName)
             model.run("حُفظ: \(kind.label) \(ayat) آية — \(g.label)", { try await model.repo.logRecitation(r) }, onError: { saving = false }) { _ in
                 saving = false
                 if goNext, let n = next { router.replaceTop(.record(n.id)) } else { router.back() }
@@ -103,7 +106,7 @@ struct RecordScreen: View {
         return ScreenList(title: "تسجيل لـ \(s.fullName)") {
             AppCard(padding: 12, onTap: { router.go(.student(s.id)) }) {
                 HStack(spacing: 10) {
-                    Avatar(name: s.fullName)
+                    StudentAvatar(s: s)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(s.fullName).font(T.titleSmall).foregroundColor(Brand.ink)
                         Text("آخر حفظ: \(lastText(last))")
@@ -186,7 +189,14 @@ struct RecordScreen: View {
                     RoundIconButton(icon: "plus") { mistakes += 1 }
                 }
                 Spacer().frame(height: 8)
-                Field(label: "ملاحظة للطالب وولي الأمر (اختياري)", text: $notes, multiline: true, minLines: 2)
+                Field(label: "ملاحظة (اختياري)", text: $notes, multiline: true, minLines: 2)
+            }
+            if !snap.teachers().isEmpty {
+                let names = snap.teachers().map { $0.name }
+                Text("المعلم المسجِّل (اختياري)").font(T.labelLarge).foregroundColor(Brand.muted)
+                ChoiceChips(options: ["بدون"] + names, selected: (names.firstIndex(of: byName).map { $0 + 1 }) ?? 0) { i in
+                    byName = i == 0 ? "" : names[i - 1]
+                }
             }
             PrimaryButton(title: grade == nil ? "اختر التقدير للحفظ" : "حفظ النتيجة", icon: "checkmark", enabled: valid && !saving, height: 54) { save(goNext: false) }
             if let n = next {

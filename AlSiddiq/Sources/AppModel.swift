@@ -5,6 +5,8 @@ import SwiftUI
 final class AppModel: ObservableObject {
     let repo: AppRepository
     @Published private(set) var user: Member?
+    @Published private(set) var baseUser: Member?
+    @Published private(set) var centerName: String = ""
     @Published private(set) var snap = CenterSnapshot()
     @Published private(set) var sync: SyncState = .localOnly
     @Published var toast: String?
@@ -22,6 +24,9 @@ final class AppModel: ObservableObject {
 
     func pull() {
         if user != repo.currentUser { user = repo.currentUser }
+        if baseUser != repo.baseUser { baseUser = repo.baseUser }
+        let cn = repo.centerName.isEmpty ? snap.center.name : repo.centerName
+        if centerName != cn { centerName = cn }
         if snap != repo.snapshot { snap = repo.snapshot }
         if sync != repo.syncState { sync = repo.syncState }
     }

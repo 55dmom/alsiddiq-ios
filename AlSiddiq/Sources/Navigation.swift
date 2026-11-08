@@ -1,16 +1,18 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case home, circles, students, reports, more, recordStart, profile, rewards, notifications
+    case home, circles, students, reports, more, teacherMore, viewerSettings, recordStart, rewards, notifications
     case attendance(String?)
     case history(String?)
     case circle(String), circleEdit(String)
     case student(String), studentEdit(String, String?)
     case record(String)
-    case members(Role), memberEdit(Role, String)
-    case announcements, announceNew, settings, about
+    case announcements, announceNew, centerSettings, about
+    case passwords, teacherNames
+    case circleReport(String)
+    case roleLogin(Role)
 
-    /// Parses the same route strings as the Android app (used by launch arguments).
+    /// Parses the same route strings as the Android app (used by launch arguments in CI).
     static func parse(_ s: String) -> Route? {
         let parts = s.split(separator: "/", maxSplits: 1).map(String.init)
         let head = parts.first ?? ""
@@ -21,8 +23,9 @@ enum Route: Hashable {
         case "students": return .students
         case "reports": return .reports
         case "more": return .more
+        case "teacher_more": return .teacherMore
+        case "viewer_settings", "settings": return .viewerSettings
         case "record_start": return .recordStart
-        case "profile": return .profile
         case "rewards": return .rewards
         case "notifications": return .notifications
         case "attendance": return .attendance(arg)
@@ -32,11 +35,14 @@ enum Route: Hashable {
         case "student": return arg.map { .student($0) }
         case "student_edit": return .studentEdit(arg ?? "new", nil)
         case "record": return arg.map { .record($0) }
-        case "members": return .members(Role(rawValue: arg ?? "TEACHER") ?? .teacher)
         case "announcements": return .announcements
         case "announce_new": return .announceNew
-        case "settings": return .settings
+        case "center": return .centerSettings
         case "about": return .about
+        case "passwords": return .passwords
+        case "teachers", "teacher_names": return .teacherNames
+        case "circle_report": return .circleReport(arg ?? "")
+        case "role_login": return .roleLogin(arg == "admin" ? .admin : .teacher)
         default: return nil
         }
     }
@@ -51,33 +57,26 @@ struct TabItem {
 
 func tabsFor(_ role: Role) -> [TabItem] {
     switch role {
+    case .viewer: return [
+        TabItem(route: .home, label: "الرئيسية", icon: "square.grid.2x2", selectedIcon: "square.grid.2x2.fill"),
+        TabItem(route: .students, label: "الطلاب", icon: "graduationcap", selectedIcon: "graduationcap.fill"),
+        TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
+        TabItem(route: .reports, label: "التقارير", icon: "chart.bar.xaxis", selectedIcon: "chart.bar.fill"),
+        TabItem(route: .viewerSettings, label: "الإعدادات", icon: "gearshape", selectedIcon: "gearshape.fill")
+    ]
     case .admin: return [
         TabItem(route: .home, label: "الرئيسية", icon: "square.grid.2x2", selectedIcon: "square.grid.2x2.fill"),
         TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
         TabItem(route: .students, label: "الطلاب", icon: "graduationcap", selectedIcon: "graduationcap.fill"),
         TabItem(route: .reports, label: "التقارير", icon: "chart.bar.xaxis", selectedIcon: "chart.bar.fill"),
-        TabItem(route: .more, label: "المزيد", icon: "circle.grid.2x2", selectedIcon: "circle.grid.2x2.fill")
+        TabItem(route: .more, label: "الإدارة", icon: "lock.shield", selectedIcon: "lock.shield.fill")
     ]
     case .teacher: return [
         TabItem(route: .home, label: "الرئيسية", icon: "house", selectedIcon: "house.fill"),
-        TabItem(route: .circles, label: "حلقاتي", icon: "person.3", selectedIcon: "person.3.fill"),
+        TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
         TabItem(route: .recordStart, label: "تسجيل", icon: "plus.circle", selectedIcon: "plus.circle.fill"),
         TabItem(route: .attendance(nil), label: "الحضور", icon: "checklist", selectedIcon: "checklist"),
-        TabItem(route: .profile, label: "حسابي", icon: "person", selectedIcon: "person.fill")
-    ]
-    case .student: return [
-        TabItem(route: .home, label: "الرئيسية", icon: "house", selectedIcon: "house.fill"),
-        TabItem(route: .history(nil), label: "سجلّي", icon: "book", selectedIcon: "book.fill"),
-        TabItem(route: .rewards, label: "المكافآت", icon: "trophy", selectedIcon: "trophy.fill"),
-        TabItem(route: .notifications, label: "الإشعارات", icon: "bell", selectedIcon: "bell.fill"),
-        TabItem(route: .profile, label: "حسابي", icon: "person", selectedIcon: "person.fill")
-    ]
-    case .parent: return [
-        TabItem(route: .home, label: "أبنائي", icon: "figure.2.and.child.holdinghands", selectedIcon: "figure.2.and.child.holdinghands"),
-        TabItem(route: .reports, label: "التقارير", icon: "chart.bar.xaxis", selectedIcon: "chart.bar.fill"),
-        TabItem(route: .attendance(nil), label: "الحضور", icon: "calendar.badge.clock", selectedIcon: "calendar.badge.clock"),
-        TabItem(route: .notifications, label: "الإشعارات", icon: "bell", selectedIcon: "bell.fill"),
-        TabItem(route: .profile, label: "حسابي", icon: "person", selectedIcon: "person.fill")
+        TabItem(route: .teacherMore, label: "المزيد", icon: "circle.grid.2x2", selectedIcon: "circle.grid.2x2.fill")
     ]
     }
 }

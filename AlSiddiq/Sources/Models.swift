@@ -1,31 +1,30 @@
 import Foundation
 
 enum Role: String, Codable, CaseIterable, Identifiable {
-    case admin = "ADMIN", teacher = "TEACHER", student = "STUDENT", parent = "PARENT"
+    case admin = "ADMIN", teacher = "TEACHER", viewer = "VIEWER"
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .admin: return "إدارة المركز"
-        case .teacher: return "معلم"
-        case .student: return "طالب"
-        case .parent: return "ولي أمر"
+        case .admin: return "الإدارة"
+        case .teacher: return "المعلمين"
+        case .viewer: return "عرض عام"
         }
     }
-    /// The value the central database uses.
+    /// The value the central database uses (profiles.access_kind).
     var dbValue: String { rawValue.lowercased() }
-    init?(db: String) { self.init(rawValue: db.uppercased()) }
+    init?(db: String) {
+        if db.lowercased() == "teachers" { self = .teacher; return }
+        self.init(rawValue: db.uppercased())
+    }
 }
 
+/// v3: an account is one PASSWORD (general/viewer, admin, teachers). There are no student or parent accounts.
 struct Member: Codable, Identifiable, Equatable, Hashable {
     var id: String
     var fullName: String
-    var phone: String
+    var phone: String = ""
     var role: Role
     var active: Bool = true
-    /// For a STUDENT account: the student record it belongs to.
-    var studentId: String? = nil
-    /// For a PARENT account: the children it may see.
-    var childIds: [String] = []
     var createdAt: Date = Date()
 }
 
@@ -33,6 +32,8 @@ struct StudyCircle: Codable, Identifiable, Equatable, Hashable {
     var id: String
     var name: String
     var teacherId: String?
+    /// v3.1: the circle's teacher, by name (from the admin's list).
+    var teacherName: String? = nil
     var level: String = ""
     var schedule: String = ""
     var capacity: Int = 20
@@ -58,6 +59,8 @@ struct Student: Codable, Identifiable, Equatable, Hashable {
     var goalJuz: Int = 30
     var status: StudentStatus = .active
     var notes: String = ""
+    /// Path of the student's photo in the private storage bucket (nil = no photo; the initial is shown).
+    var photoPath: String? = nil
     var createdAt: Date = Date()
 }
 
@@ -103,6 +106,15 @@ struct Recitation: Codable, Identifiable, Equatable, Hashable {
     var mistakes: Int = 0
     var notes: String = ""
     var recordedAt: Date = Date()
+    /// v3.1: the teacher who recorded it, picked from the admin's list of names (optional).
+    var byName: String = ""
+}
+
+/// v3.1: the admin's simple list of teacher names (no passwords; all teachers share one password).
+struct TeacherName: Codable, Identifiable, Equatable, Hashable {
+    var id: String
+    var name: String
+    var active: Bool = true
 }
 
 enum AttendanceStatus: String, Codable, CaseIterable, Identifiable {
@@ -178,24 +190,23 @@ struct CenterSnapshot: Codable, Equatable {
     var rewards: [Reward] = []
     var announcements: [Announcement] = []
     var notifications: [AppNotification] = []
+    var teacherNames: [TeacherName] = []
 
     func member(_ id: String?) -> Member? { members.first { $0.id == id } }
     func circle(_ id: String?) -> StudyCircle? { circles.first { $0.id == id } }
+    /// The name of a circle's teacher (from the admin's list of teacher names).
+    func teacherName(of c: StudyCircle) -> String? {
+        if let n = c.teacherName, !n.isEmpty { return n }
+        return teacherName(c.teacherId)
+    }
+    func teacherName(_ id: String?) -> String? {
+        guard let id = id else { return nil }
+        return teacherNames.first { $0.id == id }?.name ?? members.first { $0.id == id && $0.role == .teacher }?.fullName
+    }
     func student(_ id: String?) -> Student? { students.first { $0.id == id } }
     func studentsIn(_ circleId: String?) -> [Student] { students.filter { $0.circleId == circleId && circleId != nil } }
-    func teachers() -> [Member] { members.filter { $0.role == .teacher } }
-    func parents() -> [Member] { members.filter { $0.role == .parent } }
-    func parentsOf(_ studentId: String) -> [Member] { members.filter { $0.role == .parent && $0.childIds.contains(studentId) } }
+    func teachers() -> [TeacherName] { teacherNames.filter { $0.active }.sorted { $0.name < $1.name } }
     var unreadCount: Int { notifications.filter { !$0.read }.count }
-}
-
-struct NewMember {
-    var fullName: String
-    var phone: String
-    var role: Role
-    var password: String
-    var studentId: String? = nil
-    var childIds: [String] = []
 }
 
 enum AppError: LocalizedError {

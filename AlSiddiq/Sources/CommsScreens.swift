@@ -16,13 +16,13 @@ struct AnnouncementsScreen: View {
                         IconBadge(icon: "megaphone", tint: Brand.maroon, size: 38)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(a.title).font(T.titleSmall).foregroundColor(Brand.ink)
-                            Text("\(snap.member(a.createdBy)?.fullName ?? "الإدارة") • \(Fmt.relative(a.createdAt))").font(T.labelSmall).foregroundColor(Brand.muted)
+                            Text("\((snap.member(a.createdBy)?.role == .teacher ? "المعلمون" : "الإدارة")) • \(Fmt.relative(a.createdAt))").font(T.labelSmall).foregroundColor(Brand.muted)
                         }
                         Spacer()
                         Pill(text: a.audience.label, color: Brand.navy)
                     }
                     Text(a.body).font(T.bodyMedium).foregroundColor(Brand.ink).padding(.top, 10).fixedSize(horizontal: false, vertical: true)
-                    if user.role == .admin || a.createdBy == user.id {
+                    if user.role == .admin || (user.role == .teacher && a.createdBy == user.id) {
                         TextAction(title: "حذف", color: Brand.red) {
                             dialogs.show(ConfirmDialog(title: "حذف الإعلان؟", message: a.title, confirm: "حذف", destructive: true) {
                                 model.run("حُذف الإعلان", { try await model.repo.deleteAnnouncement(a.id) })
@@ -49,17 +49,22 @@ struct AnnounceNewScreen: View {
                     Field(label: "العنوان", text: $title)
                     Field(label: "نص الإعلان", text: $text, multiline: true, minLines: 5)
                     Text("يصل إلى").font(T.labelMedium).foregroundColor(Brand.muted).padding(.top, 2)
-                    ChoiceChips(options: Audience.allCases.map { $0.label }, selected: aud) { aud = $0 }
+                    ChoiceChips(options: AnnounceNewScreen.audiences.map { $0.label }, selected: aud) { aud = $0 }
                 }
             }
             PrimaryButton(title: "نشر الإعلان", icon: "paperplane.fill",
                           enabled: Permissions.canPostAnnouncement(user) && !title.trimmingCharacters(in: .whitespaces).isEmpty) {
                 let a = Announcement(id: "", title: title.trimmingCharacters(in: .whitespaces), body: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                                     audience: Audience.allCases[aud], createdBy: user.id)
-                model.run("نُشر الإعلان وأُرسل إشعار", { try await model.repo.postAnnouncement(a) }) { _ in router.back() }
+                                     audience: AnnounceNewScreen.audiences[aud], createdBy: user.id)
+                model.run("نُشر الإعلان", { try await model.repo.postAnnouncement(a) }) { _ in router.back() }
             }
         }
     }
+}
+
+extension AnnounceNewScreen {
+    /// v3: no parent/student accounts; "الجميع" reaches the general view too.
+    static let audiences: [Audience] = [.all, .teachers]
 }
 
 struct NotificationsScreen: View {

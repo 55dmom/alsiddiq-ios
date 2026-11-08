@@ -31,7 +31,7 @@ struct RewardsScreen: View {
         let board = RewardsScreen.leaderboard(visible, snap)
 
         ScreenList(title: "المكافآت", fab: canGive ? Fab(label: "منح مكافأة") { pickStudent(visible, snap) } : nil) {
-            if user.role == .student || user.role == .parent {
+            if false {
                 ForEach(visible) { s in
                     let st = Stats.forStudent(s, snap)
                     AppCard {
@@ -151,57 +151,3 @@ struct RewardDialog: View {
     }
 }
 
-struct ProfileScreen: View {
-    let user: Member
-    @EnvironmentObject var model: AppModel
-    @EnvironmentObject var router: Router
-    @EnvironmentObject var dialogs: DialogHost
-    var body: some View {
-        let snap = model.snap
-        ScreenList(title: "حسابي") {
-            AppCard {
-                VStack(spacing: 4) {
-                    Avatar(name: user.fullName, size: 76)
-                    Text(user.fullName).font(T.titleLarge).foregroundColor(Brand.ink).padding(.top, 6)
-                    Pill(text: user.role.label, color: Brand.maroon)
-                    Text(user.phone).font(T.bodySmall).foregroundColor(Brand.muted)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            MenuRow(title: "الإشعارات", sub: "\(snap.unreadCount) غير مقروء", icon: "bell") { router.go(.notifications) }
-            MenuRow(title: "الإعلانات", sub: "إعلانات المركز", icon: "megaphone") { router.go(.announcements) }
-            if user.role == .teacher { MenuRow(title: "المكافآت", sub: "منح النقاط ولوحة الشرف", icon: "trophy") { router.go(.rewards) } }
-            if user.role == .parent { MenuRow(title: "المكافآت", sub: "نقاط وأوسمة أبنائي", icon: "trophy") { router.go(.rewards) } }
-            MenuRow(title: "تغيير كلمة المرور", sub: "حدّث كلمة المرور الخاصة بك", icon: "key") { dialogs.show(ChangePasswordDialog()) }
-            MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "info.circle") { router.go(.about) }
-            MenuRow(title: "تسجيل الخروج", sub: "الخروج من هذا الجهاز", icon: "rectangle.portrait.and.arrow.right", tint: Brand.red) {
-                dialogs.show(ConfirmDialog(title: "تسجيل الخروج؟", message: "يمكنك الدخول مرة أخرى برقم جوالك وكلمة المرور.", confirm: "خروج", destructive: true) {
-                    Task { await model.repo.signOut(); model.pull() }
-                })
-            }
-        }
-    }
-}
-
-struct ChangePasswordDialog: View {
-    @EnvironmentObject var model: AppModel
-    @EnvironmentObject var dialogs: DialogHost
-    @State private var old = ""
-    @State private var new1 = ""
-    @State private var new2 = ""
-    var body: some View {
-        DialogCard(title: "تغيير كلمة المرور") {
-            VStack(alignment: .leading, spacing: 8) {
-                Field(label: "كلمة المرور الحالية", text: $old, secure: true)
-                Field(label: "كلمة المرور الجديدة", text: $new1, secure: true)
-                Field(label: "تأكيد كلمة المرور الجديدة", text: $new2, secure: true)
-                if !new2.isEmpty && new1 != new2 { Text("غير متطابقتين").font(T.bodySmall).foregroundColor(Brand.red) }
-            }
-        } buttons: {
-            DialogButton(title: "إلغاء") { dialogs.dismiss() }
-            DialogButton(title: "حفظ", filled: true, enabled: !new1.isEmpty && new1 == new2) {
-                model.run("تم تغيير كلمة المرور", { try await model.repo.changePassword(old: old, new: new1) }) { _ in dialogs.dismiss() }
-            }
-        }
-    }
-}
