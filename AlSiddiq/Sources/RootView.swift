@@ -43,6 +43,12 @@ struct RootView: View {
         .preferredColorScheme(.light)
         .task {
             await handleAutoLogin()
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "selfTest") {
+                let tries = UserDefaults.standard.string(forKey: "tryStudents") ?? ""
+                Task { await SelfTest.run(model, tries: tries) }
+            }
+            #endif
             try? await Task.sleep(nanoseconds: autoLogin == nil ? 1_800_000_000 : 300_000_000)
             withAnimation { splash = false }
         }

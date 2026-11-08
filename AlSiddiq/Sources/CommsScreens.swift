@@ -16,7 +16,7 @@ struct AnnouncementsScreen: View {
                         IconBadge(icon: "megaphone", tint: Brand.maroon, size: 38)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(a.title).font(T.titleSmall).foregroundColor(Brand.ink)
-                            Text("\((snap.member(a.createdBy)?.role == .teacher ? "المعلمون" : "الإدارة")) • \(Fmt.relative(a.createdAt))").font(T.labelSmall).foregroundColor(Brand.muted)
+                            Text("\((a.byName.isEmpty ? (snap.member(a.createdBy)?.role == .teacher ? "المعلمون" : "الإدارة") : a.byName)) • \(Fmt.relative(a.createdAt))").font(T.labelSmall).foregroundColor(Brand.muted)
                         }
                         Spacer()
                         Pill(text: a.audience.label, color: Brand.navy)

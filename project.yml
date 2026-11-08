@@ -53,7 +53,28 @@ targets:
         DEBUG_INFORMATION_FORMAT: dwarf
         OTHER_SWIFT_FLAGS: "-Xfrontend -warn-long-expression-type-checking=400 -Xfrontend -warn-long-function-bodies=1200"
       configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           SWIFT_COMPILATION_MODE: wholemodule
-    scheme: {}
+    scheme:
+      testTargets:
+        - AlSiddiqUITests
+  AlSiddiqUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: AlSiddiqUITests
+    dependencies:
+      - target: AlSiddiq
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.alsiddiq.app.uitests
+        TEST_TARGET_NAME: AlSiddiq
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_IDENTITY: ""

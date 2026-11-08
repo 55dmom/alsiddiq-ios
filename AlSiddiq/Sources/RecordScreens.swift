@@ -50,7 +50,7 @@ struct RecordScreen: View {
     @State private var notes = ""
     @State private var saving = false
     /// v3.1: "who recorded" (optional), remembered on this phone.
-    @AppStorage("recordedByName") private var byName = ""
+    @AppStorage(Recorder.key) private var byName = ""
 
     private func lastHifz(_ snap: CenterSnapshot) -> Recitation? {
         snap.recitations.filter { $0.studentId == studentId && $0.kind == .hifz }.max { $0.recordedAt < $1.recordedAt }

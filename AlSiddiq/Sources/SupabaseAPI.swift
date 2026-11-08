@@ -102,9 +102,16 @@ final class SupabaseAPI {
         return try? session(from: d)
     }
 
-    /// Raw call for the CI self-test: the server's own status code.
-    func rawStatus(_ method: String, _ path: String, token: String, body: Any?, headers: [String: String] = [:]) async -> Int {
-        (try? await exec(method, path, token: token, body: body, headers: headers).0) ?? -1
+    /// Raw call for the CI self-test: the server's own status code and body.
+    func rawCall(_ method: String, _ path: String, token: String, body: Any?, headers: [String: String] = [:]) async -> (Int, Data) {
+        (try? await exec(method, path, token: token, body: body, headers: headers)) ?? (-1, Data())
+    }
+
+    /// Raw storage upload for the CI self-test: the server's own status code.
+    func rawUpload(token: String, bucket: String, path: String, data: Data) async -> Int {
+        do { try await storageUpload(token: token, bucket: bucket, path: path, data: data); return 200 }
+        catch let e as APIError { return e.code }
+        catch { return -1 }
     }
 
     /// Storage: upload / download / delete an object in a bucket (the user's own token; the bucket's rules decide).
@@ -230,13 +237,13 @@ enum Rows {
 
     static func circle(_ o: JSON) -> StudyCircle? {
         guard let id = s(o, "id") else { return nil }
-        return StudyCircle(id: id, name: s(o, "name") ?? "", teacherId: s(o, "teacher_id"), level: s(o, "level") ?? "",
+        return StudyCircle(id: id, name: s(o, "name") ?? "", teacherId: s(o, "teacher_id"), teacherName: s(o, "teacher_name"), level: s(o, "level") ?? "",
                            schedule: s(o, "schedule") ?? "", capacity: i(o, "capacity") ?? 15, active: b(o, "active") ?? true,
                            createdAt: ts(o["created_at"]))
     }
 
     static func circleRow(_ c: StudyCircle, _ center: String) -> JSON {
-        ["id": c.id, "center_id": center, "name": c.name, "teacher_id": opt(c.teacherId), "level": c.level,
+        ["id": c.id, "center_id": center, "name": c.name, "teacher_id": opt(c.teacherId), "teacher_name": opt(c.teacherName), "level": c.level,
          "schedule": c.schedule, "capacity": c.capacity, "active": c.active, "updated_at": iso(Date())]
     }
 
@@ -245,7 +252,7 @@ enum Rows {
         return Student(id: id, fullName: s(o, "full_name") ?? "", phone: s(o, "phone") ?? "", birthYear: i(o, "birth_year"),
                        circleId: s(o, "circle_id"), joinedOn: s(o, "joined_on") ?? "", goalJuz: i(o, "goal_juz") ?? 5,
                        status: StudentStatus(rawValue: (s(o, "status") ?? "").uppercased()) ?? .active, notes: s(o, "notes") ?? "",
-                       createdAt: ts(o["created_at"]))
+                       photoPath: s(o, "photo_path"), createdAt: ts(o["created_at"]))
     }
 
     static func studentRow(_ st: Student, _ center: String) -> JSON {
@@ -253,7 +260,7 @@ enum Rows {
         return ["id": st.id, "center_id": center, "full_name": st.fullName, "phone": st.phone,
          "birth_year": opt(st.birthYear), "circle_id": opt(st.circleId),
          "joined_on": joined, "goal_juz": st.goalJuz,
-         "status": st.status.rawValue.lowercased(), "notes": st.notes, "updated_at": iso(Date())]
+         "status": st.status.rawValue.lowercased(), "notes": st.notes, "photo_path": opt(st.photoPath), "updated_at": iso(Date())]
     }
 
     static func recitation(_ o: JSON) -> Recitation? {
@@ -263,44 +270,50 @@ enum Rows {
                           fromSurah: i(o, "from_surah") ?? 1, fromAyah: i(o, "from_ayah") ?? 1,
                           toSurah: i(o, "to_surah") ?? 1, toAyah: i(o, "to_ayah") ?? 1,
                           grade: Grade(rawValue: (s(o, "grade") ?? "").uppercased()) ?? .good,
-                          mistakes: i(o, "mistakes") ?? 0, notes: s(o, "notes") ?? "", recordedAt: ts(o["recorded_at"]))
+                          mistakes: i(o, "mistakes") ?? 0, notes: s(o, "notes") ?? "", recordedAt: ts(o["recorded_at"]),
+                          byName: s(o, "by_name") ?? "")
     }
 
     static func recitationRow(_ r: Recitation, _ center: String) -> JSON {
         ["id": r.id, "center_id": center, "student_id": r.studentId, "circle_id": opt(r.circleId),
          "teacher_id": r.teacherId, "kind": r.kind.rawValue.lowercased(), "from_surah": r.fromSurah, "from_ayah": r.fromAyah,
          "to_surah": r.toSurah, "to_ayah": r.toAyah, "grade": r.grade.rawValue.lowercased(), "mistakes": r.mistakes,
-         "notes": r.notes, "recorded_at": iso(r.recordedAt)]
+         "notes": r.notes, "recorded_at": iso(r.recordedAt), "by_name": r.byName.isEmpty ? NSNull() : r.byName]
     }
 
     static func attendance(_ o: JSON) -> Attendance? {
         guard let id = s(o, "id"), let sid = s(o, "student_id") else { return nil }
         return Attendance(id: id, studentId: sid, circleId: s(o, "circle_id"), day: s(o, "day") ?? "",
                           status: AttendanceStatus(rawValue: (s(o, "status") ?? "").uppercased()) ?? .present,
-                          recordedBy: s(o, "recorded_by") ?? "", recordedAt: ts(o["recorded_at"]))
+                          recordedBy: s(o, "recorded_by") ?? "", recordedAt: ts(o["recorded_at"]), byName: s(o, "by_name") ?? "")
     }
 
     static func reward(_ o: JSON) -> Reward? {
         guard let id = s(o, "id"), let sid = s(o, "student_id") else { return nil }
         return Reward(id: id, studentId: sid, points: i(o, "points") ?? 0, reason: s(o, "reason") ?? "",
-                      awardedBy: s(o, "awarded_by") ?? "", createdAt: ts(o["created_at"]))
+                      awardedBy: s(o, "awarded_by") ?? "", createdAt: ts(o["created_at"]), byName: s(o, "by_name") ?? "")
     }
 
     static func rewardRow(_ r: Reward, _ center: String) -> JSON {
         ["id": r.id, "center_id": center, "student_id": r.studentId, "points": r.points, "reason": r.reason,
-         "awarded_by": r.awardedBy, "created_at": iso(r.createdAt)]
+         "awarded_by": r.awardedBy, "created_at": iso(r.createdAt), "by_name": r.byName.isEmpty ? NSNull() : r.byName]
     }
 
     static func announcement(_ o: JSON) -> Announcement? {
         guard let id = s(o, "id") else { return nil }
         return Announcement(id: id, title: s(o, "title") ?? "", body: s(o, "body") ?? "",
                             audience: Audience(rawValue: (s(o, "audience") ?? "").uppercased()) ?? .all,
-                            createdBy: s(o, "created_by") ?? "", createdAt: ts(o["created_at"]))
+                            createdBy: s(o, "created_by") ?? "", createdAt: ts(o["created_at"]), byName: s(o, "by_name") ?? "")
     }
 
     static func announcementRow(_ a: Announcement, _ center: String) -> JSON {
         ["id": a.id, "center_id": center, "title": a.title, "body": a.body, "audience": a.audience.rawValue.lowercased(),
-         "created_by": a.createdBy, "created_at": iso(a.createdAt)]
+         "created_by": a.createdBy, "created_at": iso(a.createdAt), "by_name": a.byName.isEmpty ? NSNull() : a.byName]
+    }
+
+    static func teacherName(_ o: JSON) -> TeacherName? {
+        guard let id = s(o, "id") else { return nil }
+        return TeacherName(id: id, name: s(o, "name") ?? "", active: b(o, "active") ?? true)
     }
 
     static func notification(_ o: JSON) -> AppNotification? {

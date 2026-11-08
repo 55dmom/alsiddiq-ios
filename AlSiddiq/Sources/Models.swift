@@ -135,6 +135,7 @@ struct Attendance: Codable, Identifiable, Equatable, Hashable {
     var status: AttendanceStatus
     var recordedBy: String
     var recordedAt: Date = Date()
+    var byName: String = ""
 }
 
 struct Reward: Codable, Identifiable, Equatable, Hashable {
@@ -144,6 +145,7 @@ struct Reward: Codable, Identifiable, Equatable, Hashable {
     var reason: String
     var awardedBy: String
     var createdAt: Date = Date()
+    var byName: String = ""
 }
 
 enum Audience: String, Codable, CaseIterable, Identifiable {
@@ -161,6 +163,7 @@ struct Announcement: Codable, Identifiable, Equatable, Hashable {
     var audience: Audience
     var createdBy: String
     var createdAt: Date = Date()
+    var byName: String = ""
 }
 
 struct AppNotification: Codable, Identifiable, Equatable, Hashable {
@@ -217,5 +220,14 @@ enum AppError: LocalizedError {
         switch self {
         case .permissionDenied(let m), .validation(let m), .network(let m): return m
         }
+    }
+}
+
+/// v3.1: the teacher's own name picked on this phone (optional); records then carry it as by_name.
+enum Recorder {
+    static let key = "recordedByName"
+    static var name: String? {
+        let n = UserDefaults.standard.string(forKey: key) ?? ""
+        return n.isEmpty ? nil : n
     }
 }

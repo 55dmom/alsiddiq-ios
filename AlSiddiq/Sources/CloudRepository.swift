@@ -208,8 +208,16 @@ final class CloudRepository: AppRepository {
         async let rewards = api.selectAll(token: t, table: "rewards", query: "select=*&order=created_at.desc")
         async let ann = api.selectAll(token: t, table: "announcements", query: "select=*&order=created_at.desc")
         async let notes = api.selectAll(token: t, table: "notifications", query: "select=*&user_id=eq.\(me.id)&order=created_at.desc")
+        async let names = api.selectAll(token: t, table: "teacher_names", query: "select=*&order=name")
 
         let members = (try await profiles).compactMap { Rows.member($0) }
+        if !members.contains(where: { $0.id == me.id }) {
+            // v3.1: my own profile is unreadable = this login was ended on the server (its password was changed).
+            // Force a refresh: a 4xx there drops this login (see token()).
+            if var s = st.session { s.expiresAt = Date(timeIntervalSince1970: 0); st.session = s; save() }
+            _ = try await token()
+            return
+        }
         var fresh = CenterSnapshot()
         fresh.center = (try await centers).first.map { Rows.center($0) } ?? CenterInfo()
         fresh.members = members
@@ -220,6 +228,7 @@ final class CloudRepository: AppRepository {
         fresh.rewards = (try await rewards).compactMap { Rows.reward($0) }
         fresh.announcements = (try await ann).compactMap { Rows.announcement($0) }
         fresh.notifications = (try await notes).compactMap { Rows.notification($0) }
+        fresh.teacherNames = ((try? await names) ?? []).compactMap { Rows.teacherName($0) }
 
         // Writes still waiting stay visible on screen until the server has them.
         let merged = st.outbox.isEmpty ? fresh : overlayPending(fresh)
@@ -326,26 +335,84 @@ final class CloudRepository: AppRepository {
         try require(Permissions.canManagePasswords(try me()))
         let pw = Passwords.normalise(password)
         if let bad = Passwords.check(pw) { throw AppError.validation(bad) }
-        _ = try await adminFunction(["action": "set_password", "target": target.dbValue, "password": pw])
+        let t: String
+        switch target { case .admin: t = "admin"; case .teacher: t = "teachers"; case .viewer: t = "viewer" }
+        _ = try await adminFunction(["action": "set_password", "target": t, "password": pw])
     }
 
-    // TEACHER_NAMES_BEGIN
+    // MARK: Teacher names (v3.1: names only; admin writes them with plain PostgREST)
     func saveTeacherName(id: String?, name: String) async throws {
-        throw AppError.validation("غير متاح بعد")
+        try require(Permissions.canManageCenter(try me()))
+        let n = name.trimmingCharacters(in: .whitespaces)
+        if n.isEmpty { throw AppError.validation("اكتب اسم المعلم") }
+        let tid = id ?? newId()
+        let row = json(["id": tid, "center_id": try center(), "name": n, "active": true])
+        let old = st.cache.teacherNames.first { $0.id == tid }?.name
+        _ = try await write(PendingOp(type: "upsert", table: "teacher_names", body: row), ()) { d in
+            if let i = d.teacherNames.firstIndex(where: { $0.id == tid }) { d.teacherNames[i].name = n }
+            else { d.teacherNames.append(TeacherName(id: tid, name: n)) }
+        }
+        // A renamed teacher keeps their circles.
+        if let old = old, old != n {
+            for c in st.cache.circles where c.teacherName == old {
+                var c2 = c; c2.teacherName = n
+                _ = try? await saveCircle(c2)
+            }
+        }
     }
 
     func removeTeacherName(_ id: String) async throws {
-        throw AppError.validation("غير متاح بعد")
+        try require(Permissions.canManageCenter(try me()))
+        let body = json(["active": false])
+        _ = try await write(PendingOp(type: "patch", table: "teacher_names", body: body, filter: "id=eq.\(id)"), ()) { d in
+            d.teacherNames = d.teacherNames.map { var t = $0; if t.id == id { t.active = false }; return t }
+        }
     }
-    // TEACHER_NAMES_END
 
-    // PHOTOS_BEGIN
+    // MARK: Student photos (v3.1: private bucket «student-photos», path <center>/<student>/<random8>.jpg)
+    private static let bucket = "student-photos"
+
     func setStudentPhoto(studentId: String, jpeg: Data?) async throws {
-        throw AppError.validation("غير متاح بعد")
+        let u = try me()
+        guard let s = st.cache.student(studentId) else { throw AppError.validation("الطالب غير موجود") }
+        try require(Permissions.canEditStudent(u, s, st.cache))
+        let t: String
+        do { t = try await token() } catch is OfflineError { throw AppError.network("الصورة تحتاج اتصالاً بالإنترنت") }
+        let old = s.photoPath
+        var newPath: String? = nil
+        do {
+            if let data = jpeg {
+                let rnd = String(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(8))
+                let path = "\(try center())/\(studentId)/\(rnd).jpg"
+                try await api.storageUpload(token: t, bucket: Self.bucket, path: path, data: data)
+                newPath = path
+                if let img = UIImage(data: data) { photoCache[path] = img; savePhotoFile(path, data) }
+            }
+            try await api.patch(token: t, table: "students", filter: "id=eq.\(studentId)", body: ["photo_path": opt(newPath)])
+        } catch is OfflineError { throw AppError.network("الصورة تحتاج اتصالاً بالإنترنت") }
+        if let i = st.cache.students.firstIndex(where: { $0.id == studentId }) { st.cache.students[i].photoPath = newPath }
+        save(); publish()
+        if let old = old, old != newPath { Task { try? await api.storageDelete(token: t, bucket: Self.bucket, path: old) } }
     }
 
-    func photo(_ s: Student) async -> UIImage? { nil }
-    // PHOTOS_END
+    private var photoDir: URL {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("student-photos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+    private func photoFile(_ path: String) -> URL { photoDir.appendingPathComponent(path.replacingOccurrences(of: "/", with: "_")) }
+    private func savePhotoFile(_ path: String, _ data: Data) { try? data.write(to: photoFile(path), options: .atomic) }
+
+    func photo(_ s: Student) async -> UIImage? {
+        guard let path = s.photoPath, !path.isEmpty else { return nil }
+        if let img = photoCache[path] { return img }
+        if let d = try? Data(contentsOf: photoFile(path)), let img = UIImage(data: d) { photoCache[path] = img; return img }
+        guard let t = try? await token(), let d = try? await api.storageDownload(token: t, bucket: Self.bucket, path: path),
+              let img = UIImage(data: d) else { return nil }
+        photoCache[path] = img
+        savePhotoFile(path, d)
+        return img
+    }
 
     func saveCircle(_ c: StudyCircle) async throws -> StudyCircle {
         try require(Permissions.canManageCircles(try me()))
@@ -416,7 +483,8 @@ final class CloudRepository: AppRepository {
         let c = try center()
         let now = Rows.iso(Date())
         let rows: [JSON] = marks.map { sid, s in
-            ["center_id": c, "student_id": sid, "circle_id": circleId, "day": day, "status": s.rawValue.lowercased(), "recorded_by": u.id, "recorded_at": now]
+            ["center_id": c, "student_id": sid, "circle_id": circleId, "day": day, "status": s.rawValue.lowercased(), "recorded_by": u.id, "recorded_at": now,
+             "by_name": opt(Recorder.name)]
         }
         let local = marks.map { Attendance(id: newId(), studentId: $0.key, circleId: circleId, day: day, status: $0.value, recordedBy: u.id) }
         return try await write(PendingOp(type: "upsert", table: "attendance", body: json(rows), onConflict: "student_id,day"), marks.count) { snap in
@@ -434,6 +502,7 @@ final class CloudRepository: AppRepository {
         var saved = r
         if saved.id.isEmpty { saved.id = newId() }
         saved.awardedBy = u.id
+        if saved.byName.isEmpty { saved.byName = Recorder.name ?? "" }
         let row = json(Rows.rewardRow(saved, try center()))
         return try await write(PendingOp(type: "upsert", table: "rewards", body: row, ignoreDuplicates: true), saved) { $0.rewards.insert(saved, at: 0) }
     }
@@ -446,6 +515,7 @@ final class CloudRepository: AppRepository {
         var saved = a
         if saved.id.isEmpty { saved.id = newId() }
         saved.createdBy = u.id
+        if saved.byName.isEmpty, u.role == .teacher { saved.byName = Recorder.name ?? "" }
         let row = json(Rows.announcementRow(saved, try center()))
         return try await write(PendingOp(type: "upsert", table: "announcements", body: row, ignoreDuplicates: true), saved) { $0.announcements.insert(saved, at: 0) }
     }
@@ -486,6 +556,31 @@ final class CloudRepository: AppRepository {
     }
 
     var isSignedIn: Bool { st.session != nil }
+
+    #if DEBUG
+    /// CI only: raw writes straight to the server, past the app's own checks, so the log shows the SERVER's answer
+    /// (2xx = allowed; 401/403 or 0 rows = refused by the server's rules).
+    func debugRawWrites(studentId: String, circleId: String?) async -> String {
+        guard let t = try? await token(), let me = st.me, let c = st.centerId else { return "no-session" }
+        let rec: JSON = ["id": newId(), "center_id": c, "student_id": studentId, "circle_id": opt(circleId), "teacher_id": me.id,
+                         "kind": "hifz", "from_surah": 1, "from_ayah": 1, "to_surah": 1, "to_ayah": 7, "grade": "excellent", "notes": "selftest-raw-\(me.role.dbValue)"]
+        let att: JSON = ["center_id": c, "student_id": studentId, "circle_id": opt(circleId), "day": "2026-01-01", "status": "absent", "recorded_by": me.id]
+        let r1 = await api.rawCall("POST", "/rest/v1/recitations", token: t, body: [rec], headers: ["Prefer": "return=minimal"]).0
+        let r2 = await api.rawCall("POST", "/rest/v1/attendance", token: t, body: [att], headers: ["Prefer": "return=minimal"]).0
+        let (r3, d3) = await api.rawCall("PATCH", "/rest/v1/students?id=eq.\(studentId)", token: t,
+                                         body: ["notes": "selftest-edit-by-\(me.role.dbValue)"], headers: ["Prefer": "return=representation"])
+        let n3 = ((try? JSONSerialization.jsonObject(with: d3)) as? [Any])?.count ?? -1
+        let jpg = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { ctx in
+            UIColor(red: 0.16, green: 0.15, blue: 0.39, alpha: 1).setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }.jpegData(compressionQuality: 0.7) ?? Data()
+        let r4 = await api.rawUpload(token: t, bucket: Self.bucket, path: "\(c)/\(studentId)/selftest-\(me.role.dbValue).jpg", data: jpg)
+        let (r5, d5) = await api.rawCall("POST", "/rest/v1/students", token: t,
+                                         body: [["id": newId(), "center_id": c, "full_name": "TEST raw-\(me.role.dbValue)", "circle_id": opt(circleId)]],
+                                         headers: ["Prefer": "return=minimal"])
+        _ = d5
+        return "recitation=\(r1) attendance=\(r2) student_edit=\(r3)/rows=\(n3) photo_upload=\(r4) student_insert=\(r5)"
+    }
+    #endif
 }
 
 /// Normal iPhone notifications for new centre notifications (absence, new hifz, rewards, announcements).

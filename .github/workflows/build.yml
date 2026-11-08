@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      live_check:
+        description: "Run the live check against the real database (only while it needs setup)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,6 +45,7 @@ jobs:
             SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             2>&1 | tee build.log | grep -E "error:|ARCHIVE SUCCEEDED|ARCHIVE FAILED|BUILD FAILED" || true
           grep -E "error:" build.log | sort -u | head -60 > errors.txt || true
+          head -40 errors.txt | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true
           test -d build/AlSiddiq.xcarchive/Products/Applications/AlSiddiq.app
           grep -q "ARCHIVE SUCCEEDED" build.log
       - name: Package ipa
@@ -102,6 +108,41 @@ jobs:
         with:
           name: screenshots
           path: shots
+
+  live:
+    if: ${{ inputs.live_check }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen && xcodegen generate
+      - name: Pick simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone 16 Pro') or x['name'].startswith('iPhone 15 Pro')] or [x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')];print(c[-1]['udid'])")
+          echo "udid=$UDID" >> $GITHUB_OUTPUT
+      - name: Build for testing (Debug, real database)
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project AlSiddiq.xcodeproj -scheme AlSiddiq -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" -derivedDataPath dd \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            2>&1 | tee live_build.log | grep -E "error:|TEST BUILD SUCCEEDED|BUILD FAILED" || true
+          grep -hE "error:" live_build.log | sort -u | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true
+          grep -q "SUCCEEDED" live_build.log
+      - name: Live check
+        timeout-minutes: 30
+        run: bash ci/cloud_check.sh "${{ steps.sim.outputs.udid }}"
+      - name: Publish live results
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p shots; touch shots/cloud_selftest.txt
+          gh release create "live-${{ github.run_number }}" shots/*.png shots/*.txt shots/uitest.log --repo "${{ github.repository }}" --prerelease \
+            --title "live check ${{ github.run_number }}" --notes "Live check against the real database (throwaway rows, removed after)." || true
 
   release:
     needs: [ipa, screenshots]

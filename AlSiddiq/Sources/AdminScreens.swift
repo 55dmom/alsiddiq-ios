@@ -200,9 +200,15 @@ struct TeacherMoreScreen: View {
     let user: Member
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var router: Router
+    @EnvironmentObject var dialogs: DialogHost
+    @AppStorage(Recorder.key) private var myName = ""
     var body: some View {
         ScreenList(title: "المزيد") {
             RoleStrip(user: user)
+            MenuRow(title: "اسمي", sub: myName.isEmpty ? "اختر اسمك ليظهر على تسجيلاتك (اختياري)" : myName, icon: "person.text.rectangle", tint: Brand.gold) {
+                let names = [TeacherName(id: "", name: "بدون اسم")] + model.snap.teachers()
+                dialogs.show(PickerDialog(title: "اسمي", items: names, label: { $0.name }) { myName = $0.id.isEmpty ? "" : $0.name })
+            }
             MenuRow(title: "تقرير اليوم", sub: "اختر الحلقة: كم حفظوا ومن غاب، ونشره أو مشاركته", icon: "doc.text", tint: Brand.maroon) { router.go(.circleReport("")) }
             MenuRow(title: "طالب جديد", sub: "إضافة طالب لأي حلقة", icon: "person.badge.plus") { router.go(.studentEdit("new", nil)) }
             MenuRow(title: "الطلاب", sub: "كل الطلاب • تعديل البيانات والصور", icon: "graduationcap") { router.go(.students) }
