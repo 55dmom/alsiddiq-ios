@@ -258,14 +258,27 @@ enum Rows {
 
     static func circle(_ o: JSON) -> StudyCircle? {
         guard let id = s(o, "id") else { return nil }
-        return StudyCircle(id: id, name: s(o, "name") ?? "", teacherId: s(o, "teacher_id"), teacherName: s(o, "teacher_name"), level: s(o, "level") ?? "",
+        if o.keys.contains("fee_yer") { serverHasFees = true }
+        return StudyCircle(id: id, name: s(o, "name") ?? "", teacherId: s(o, "teacher_id"), teacherName: s(o, "teacher_name"),
+                           feeYer: i(o, "fee_yer"), feePeriod: s(o, "fee_period"), level: s(o, "level") ?? "",
                            schedule: s(o, "schedule") ?? "", capacity: i(o, "capacity") ?? 15, active: b(o, "active") ?? true,
                            createdAt: ts(o["created_at"]))
     }
 
+    /// v3.5: set once the server's circles carry fee_yer; until then the fee columns are only sent when a fee is set.
+    static var serverHasFees: Bool {
+        get { UserDefaults.standard.bool(forKey: "serverHasFees") }
+        set { if newValue != serverHasFees { UserDefaults.standard.set(newValue, forKey: "serverHasFees") } }
+    }
+
     static func circleRow(_ c: StudyCircle, _ center: String) -> JSON {
-        ["id": c.id, "center_id": center, "name": c.name, "teacher_id": opt(c.teacherId), "teacher_name": opt(c.teacherName), "level": c.level,
+        var row: JSON = ["id": c.id, "center_id": center, "name": c.name, "teacher_id": opt(c.teacherId), "teacher_name": opt(c.teacherName), "level": c.level,
          "schedule": c.schedule, "capacity": c.capacity, "active": c.active, "updated_at": iso(Date())]
+        if serverHasFees || c.feeYer != nil {
+            row["fee_yer"] = opt(c.feeYer)
+            row["fee_period"] = c.feePeriod ?? "monthly"
+        }
+        return row
     }
 
     static func student(_ o: JSON) -> Student? {

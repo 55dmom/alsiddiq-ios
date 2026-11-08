@@ -89,7 +89,7 @@ private struct AttendanceTaking: View {
                 PrimaryButton(title: dirty ? "حفظ الحضور" : "محفوظ ✓", enabled: dirty) {
                     var m: [String: AttendanceStatus] = [:]
                     for s in students { if let v = marks[s.id] { m[s.id] = v } }
-                    model.run(nil, { try await model.repo.saveAttendance(circleId: c.id, day: dayIso, marks: m) }) { n in model.say("حُفظ حضور \(n) طالب") }
+                    model.run(nil, { try await model.repo.saveAttendance(circleId: c.id, day: dayIso, marks: m) }) { n in model.say("حُفظ حضور " + Fmt.students(n)) }
                 }
                 Text("الغائبون يظهرون في «تقرير اليوم» للحلقة.").font(T.labelSmall).foregroundColor(Brand.muted)
             }

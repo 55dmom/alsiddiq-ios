@@ -52,11 +52,12 @@ struct CircleCard: View {
                     Text(c.name).font(T.titleSmall).foregroundColor(Brand.ink)
                     Text(snap.teacherName(of: c) ?? "بدون معلم").font(T.bodySmall).foregroundColor(Brand.muted)
                     if !c.schedule.isEmpty { Text(c.schedule).font(T.labelSmall).foregroundColor(Brand.muted) }
+                    if let fee = Fmt.fee(c) { Text(fee).font(T.labelSmall).foregroundColor(Brand.goldInk) }
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
-                    Pill(text: "\(students.count) طالب", color: Brand.navy)
-                    if !c.level.isEmpty { Pill(text: c.level, color: Brand.maroon) }
+                    Pill(text: Fmt.students(students.count), color: Brand.navy)
+                    if !c.level.isEmpty { Pill(text: Fmt.level(c.level), color: Brand.maroon) }
                 }
             }
             if !att.isEmpty {

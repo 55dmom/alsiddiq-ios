@@ -34,6 +34,9 @@ struct StudyCircle: Codable, Identifiable, Equatable, Hashable {
     var teacherId: String?
     /// v3.1: the circle's teacher, by name (from the admin's list).
     var teacherName: String? = nil
+    /// v3.5: the circle's fee in Yemeni rial (admin only; nil = not shown) and its period: monthly | term | once.
+    var feeYer: Int? = nil
+    var feePeriod: String? = nil
     var level: String = ""
     var schedule: String = ""
     var capacity: Int = 20

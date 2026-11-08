@@ -21,7 +21,7 @@ struct StudentsScreen: View {
         ScreenList(title: "الطلاب", fab: Permissions.canEditStudents(user, snap) ? Fab(label: "طالب جديد") { router.go(.studentEdit("new", nil)) } : nil) {
             SearchField(placeholder: "بحث باسم الطالب", text: $q)
             ChoiceChips(options: options, selected: circleIdx) { circleIdx = $0 }
-            Text("\(list.count) طالب").font(T.labelMedium).foregroundColor(Brand.muted)
+            Text(Fmt.students(list.count)).font(T.labelMedium).foregroundColor(Brand.muted)
             if list.isEmpty { EmptyState(title: "لا يوجد طلاب", message: needle.isEmpty ? (Permissions.canEditStudents(user, snap) ? "أضف أول طالب للمركز" : "تضيفهم الإدارة أو المعلمون") : "لا نتائج مطابقة للبحث") }
             ForEach(list) { s in
                 StudentRow(s: s, snap: snap, onTap: { router.go(.student(s.id)) }) {
@@ -215,7 +215,9 @@ struct StudentEditScreen: View {
                 name = e.fullName; phone = e.phone; birth = e.birthYear.map(String.init) ?? ""
                 circleId = e.circleId; goal = String(e.goalJuz); status = e.status; notes = e.notes
             } else {
-                circleId = presetCircle
+                // v3.3: a teacher adds into his own circle (preset, or his first one)
+                let mine = Permissions.editableCircles(user, model.snap)
+                circleId = presetCircle.flatMap { p in mine.contains { $0.id == p } ? p : nil } ?? (user.role == .teacher ? mine.first?.id : presetCircle)
             }
         }
     }

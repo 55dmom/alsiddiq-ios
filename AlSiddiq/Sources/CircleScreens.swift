@@ -53,7 +53,10 @@ struct CircleDetailScreen: View {
                     Avatar(name: teacherName ?? "؟", size: 46, color: Brand.maroon)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(teacherName ?? "بدون معلم").font(T.titleSmall).foregroundColor(Brand.ink)
-                        Text([circle.level, circle.schedule].filter { !$0.isEmpty }.joined(separator: " • ")).font(T.bodySmall).foregroundColor(Brand.muted)
+                        Text([Fmt.level(circle.level), circle.schedule].filter { !$0.isEmpty }.joined(separator: " • ")).font(T.bodySmall).foregroundColor(Brand.muted)
+                        if let fee = Fmt.fee(circle) {
+                            Text(fee).font(T.labelLarge).foregroundColor(Brand.goldInk).padding(.top, 2).accessibilityIdentifier("circleFeeText")
+                        }
                     }
                     Spacer()
                 }
@@ -114,7 +117,9 @@ struct CircleEditScreen: View {
     @State private var level = ""
     @State private var schedule = ""
     @State private var capacity = "15"
-    let levels = ["تمهيدي", "متوسط", "متقدم", "مراجعة", "إجازة"]
+    @State private var fee = ""
+    @State private var feePeriod = "monthly"
+    let levels = ["مبتدئ", "متوسط", "متقدم", "مراجعة", "إجازة"]
 
     var body: some View {
         let snap = model.snap
@@ -133,6 +138,12 @@ struct CircleEditScreen: View {
                     ChoiceChips(options: levels, selected: levels.firstIndex(of: level) ?? -1) { level = levels[$0] }
                     Field(label: "الموعد (مثال: بعد العصر • السبت–الأربعاء)", text: $schedule)
                     Field(label: "السعة القصوى", text: Binding(get: { capacity }, set: { v in capacity = String(v.filter { $0.isNumber }.prefix(3)) }), keyboard: .numberPad)
+                    // v3.5: the circle's fee (admin only; empty = no fee shown)
+                    Field(label: "رسوم الحلقة (ريال يمني)", text: Binding(get: { fee }, set: { v in fee = String(Passwords.normalise(v).filter { $0.isNumber }.prefix(9)) }), keyboard: .numberPad)
+                        .accessibilityIdentifier("circleFee")
+                    if !fee.isEmpty {
+                        ChoiceChips(options: Fmt.feePeriods.map { $0.1 }, selected: Fmt.feePeriods.firstIndex { $0.0 == feePeriod } ?? 0) { feePeriod = Fmt.feePeriods[$0].0 }
+                    }
                 }
             }
             PrimaryButton(title: existing == nil ? "إنشاء الحلقة" : "حفظ") {
@@ -143,6 +154,8 @@ struct CircleEditScreen: View {
                 c.level = level
                 c.schedule = schedule.trimmingCharacters(in: .whitespaces)
                 c.capacity = Int(capacity) ?? 15
+                c.feeYer = Int(fee)
+                c.feePeriod = c.feeYer == nil ? nil : feePeriod
                 model.run(existing == nil ? "تم إنشاء الحلقة" : "تم الحفظ", { try await model.repo.saveCircle(c) }) { _ in router.back() }
             }
             if let ex = existing {
@@ -157,7 +170,8 @@ struct CircleEditScreen: View {
             guard !loaded else { return }
             loaded = true
             if let e = model.snap.circle(id) {
-                name = e.name; teacherName = model.snap.teacherName(of: e); teacherId = e.teacherId; level = e.level; schedule = e.schedule; capacity = String(e.capacity)
+                name = e.name; teacherName = model.snap.teacherName(of: e); teacherId = e.teacherId; level = Fmt.level(e.level); schedule = e.schedule; capacity = String(e.capacity)
+                fee = e.feeYer.map(String.init) ?? ""; feePeriod = e.feePeriod ?? "monthly"
             }
         }
     }

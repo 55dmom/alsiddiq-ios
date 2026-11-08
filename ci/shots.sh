@@ -81,6 +81,9 @@ t 20 xcrun simctl terminate "$U" $BID 2>/dev/null || true
 t 60 xcrun simctl launch "$U" $BID -AppleLanguages "(ar)" -AppleLocale ar_SA -forceDemo YES -autoLogin admin -startRoute more -openTool about > /dev/null
 sleep 9; t 30 xcrun simctl io "$U" screenshot "shots/33_about_admin.png" > /dev/null 2>&1; echo "shot 33_about_admin"
 tool 34_developer developer
+# circle fees (v3.5): the admin's edit field, the read-only line on the circle page
+shot 37_admin_circle_edit_fee admin circle_edit/c1
+shot 38_viewer_circle_fee viewer circle/c1
 # offline: what a teacher sees with 2 entries still on the phone (Debug flag -ciPending, simulated state)
 EXTRA="-ciPending 2" shot 35_offline_pending_home teacher home 8
 EXTRA="-ciPending 2" shot 36_offline_pending_history teacher history/s1 8

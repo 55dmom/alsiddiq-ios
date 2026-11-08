@@ -190,7 +190,7 @@ struct MoreScreen: View {
             MenuRow(title: "المعلمون", sub: "\(snap.teachers().count) معلم • لكل معلم كلمة سره وحلقته", icon: "person.crop.rectangle") { router.go(.teacherNames) }
             SectionHeader(title: "المركز")
             MenuRow(title: "الحلقات", sub: "\(snap.circles.count) حلقة", icon: "person.3") { router.go(.circles) }
-            MenuRow(title: "الطلاب", sub: "\(snap.students.count) طالب", icon: "graduationcap") { router.go(.students) }
+            MenuRow(title: "الطلاب", sub: Fmt.students(snap.students.count), icon: "graduationcap") { router.go(.students) }
             MenuRow(title: "الحضور", sub: "تحضير أي حلقة", icon: "checklist") { router.go(.attendance(nil)) }
             MenuRow(title: "تقرير اليوم للحلقات", sub: "كم حفظوا ومن غاب", icon: "doc.text") { router.go(.circleReport("")) }
             MenuRow(title: "الإعلانات", sub: "\(snap.announcements.count) إعلان", icon: "megaphone") { router.go(.announcements) }
@@ -425,7 +425,7 @@ enum CircleReport {
         let att = snap.attendance.filter { ids.contains($0.studentId) && $0.day == iso }
         var lines: [String] = []
         let hifz = recs.filter { $0.kind == .hifz }
-        lines.append("حفظ اليوم: \(Set(hifz.map { $0.studentId }).count) طالب • \(hifz.reduce(0) { $0 + Stats.ayatOf($1) }) آية")
+        lines.append("حفظ اليوم: \(Fmt.students(Set(hifz.map { $0.studentId }).count)) • \(hifz.reduce(0) { $0 + Stats.ayatOf($1) }) آية")
         for s in students {
             let mine = recs.filter { $0.studentId == s.id }
             if mine.isEmpty { continue }

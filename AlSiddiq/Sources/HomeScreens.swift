@@ -145,7 +145,7 @@ struct TeacherHome: View {
                                 }
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("تسميع اليوم • \(c.name)").font(T.titleSmall).foregroundColor(Brand.ink)
-                                    Text(pending == 0 ? "أحسنت! سُجّل جميع الطلاب" : "بقي \(pending) طالب لم يُسجَّل لهم").font(T.bodySmall).foregroundColor(Brand.muted)
+                                    Text(pending == 0 ? "أحسنت! سُجّل جميع الطلاب" : "بقي " + Fmt.students(pending) + " لم يُسجَّل لهم").font(T.bodySmall).foregroundColor(Brand.muted)
                                     if canEdit { Button { router.go(.circle(c.id)) } label: {
                                         HStack(spacing: 4) { Image(systemName: "plus"); Text("تسجيل الآن").font(T.labelLarge) }
                                             .foregroundColor(.white).padding(.horizontal, 16).frame(height: 40)

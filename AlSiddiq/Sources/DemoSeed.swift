@@ -33,7 +33,7 @@ struct DemoStore: Codable {
 
 /// Sample data for design and testing only. Never used once the central database is connected.
 enum DemoSeed {
-    static let version = 5
+    static let version = 6
     /// Demo passwords (sample data only): general view, admin, and each teacher's own (v3.3).
     static let viewerPassword = "111111"
     static let adminPassword = "222222"
@@ -57,9 +57,9 @@ enum DemoSeed {
         let t3 = TeacherName(id: m3.id, name: m3.fullName)
 
         let circles = [
-            StudyCircle(id: "c1", name: "حلقة أبي بكر الصديق", teacherId: "m-t1", teacherName: t1.name, level: "متقدم", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
+            StudyCircle(id: "c1", name: "حلقة أبي بكر الصديق", teacherId: "m-t1", teacherName: t1.name, feeYer: 5000, feePeriod: "monthly", level: "متقدم", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
             StudyCircle(id: "c2", name: "حلقة عمر بن الخطاب", teacherId: "m-t2", teacherName: t2.name, level: "متوسط", schedule: "بعد العصر • السبت–الأربعاء", capacity: 15),
-            StudyCircle(id: "c3", name: "حلقة البراعم", teacherId: "m-t3", teacherName: t3.name, level: "تمهيدي", schedule: "بعد المغرب • الأحد–الخميس", capacity: 20),
+            StudyCircle(id: "c3", name: "حلقة البراعم", teacherId: "m-t3", teacherName: t3.name, feeYer: 15000, feePeriod: "term", level: "مبتدئ", schedule: "بعد المغرب • الأحد–الخميس", capacity: 20),
             StudyCircle(id: "c4", name: "حلقة الفجر للكبار", teacherId: "m-t1", teacherName: t1.name, level: "مراجعة", schedule: "بعد الفجر • يومياً", capacity: 12)
         ]
         let names = [
