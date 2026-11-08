@@ -14,6 +14,8 @@ enum ToolItem: String, CaseIterable, Identifiable, Hashable {
     case mushaf, hifz, khatma, prayer, adhkar, duas, tasbeeh, asma
     case themes   // «الثيمات», not a tool: listed apart at the end
     case about, developer   // «عن المركز» and «تواصل مع المطوّر»: public pages, listed apart
+    /// His full-screen video tools: the bar's back button is white over them, never the app's colour.
+    static let darkScreens: Set<ToolItem> = [.tasbeeh, .asma]
     static var tools: [ToolItem] { allCases.filter { ![.themes, .about, .developer].contains($0) } }
     var id: String { rawValue }
     var title: String {
@@ -125,7 +127,7 @@ struct ToolsSheet: View {
         }
         .environmentObject(dialogs)
         .id(theme.active.id)
-        .tint(Brand.navy)
+        .tint(ToolItem.darkScreens.contains(tools.path.last ?? .themes) ? .white : Brand.navy)
         .environment(\.layoutDirection, .rightToLeft)
         .preferredColorScheme(theme.active.palette.dark ? .dark : .light)
     }
@@ -213,7 +215,7 @@ struct ToolsTabScreen: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: ToolItem.self) { $0.screen }
         }
-        .tint(Brand.navy)
+        .tint(ToolItem.darkScreens.contains(tools.tabPath.last ?? .themes) ? .white : Brand.navy)
         .accessibilityIdentifier("toolsTab")
     }
 }
