@@ -130,7 +130,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" > shots/unit_tests.log 2>&1 || true
           grep -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)" shots/unit_tests.log | tail -40 > shots/unit_tests.txt || true
           cat shots/unit_tests.txt
-      - name: UI test (demo data): every settings row, then «رجوع», lands back on its list
+      - name: "UI test (demo data) - every settings row, then back, lands on its list"
         timeout-minutes: 15
         run: |
           mkdir -p shots
