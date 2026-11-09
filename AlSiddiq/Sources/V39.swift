@@ -98,7 +98,7 @@ struct TeacherTimeSheet: View {
     var body: some View {
         VStack(spacing: 12) {
             Text(title).font(T.titleSmall).foregroundColor(Brand.ink)
-            HStack(spacing: 0) {   // hour on the left, minute on the right, whatever the layout direction
+            HStack(spacing: 0) {
                 Picker("الساعة", selection: $hour) {
                     ForEach(0..<24, id: \.self) { h in Text(String(format: "%02d", h)).tag(h) }
                 }
@@ -112,7 +112,6 @@ struct TeacherTimeSheet: View {
                 .frame(maxWidth: .infinity)
             }
             .frame(height: 180)
-            .environment(\.layoutDirection, .leftToRight)
             HStack(spacing: 10) {
                 Button { onClear(); dismiss() } label: {
                     Text("مسح").font(T.labelLarge).foregroundColor(Brand.red).frame(maxWidth: .infinity).frame(height: 44)
