@@ -72,6 +72,8 @@ struct GateFrame<Content: View>: View {
                     DeveloperButtonSmall()
                 }
                 .padding(.top, 14)
+                // v3.9: «تواصل مع المركز» under that row, only when the admin switched it on (opening screen)
+                if showTools { OpeningContactButton().padding(.top, 10) }
                 if model.isDemo {
                     Spacer().frame(height: 16)
                     DemoBanner()

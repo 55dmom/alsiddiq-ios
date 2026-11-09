@@ -46,6 +46,9 @@ if up "^iPhone SE \\(3rd|^iPhone SE|^iPhone 13 mini|^iPhone 12 mini|^iPhone 16e|
   shot L5_se_admin_page admin more 8
   EXTRA="-ciScrollTools NO" shot L6_se_tools_tab viewer tools 9
   EXTRA="-ciV38Demo YES" shot L7_se_teacher_attendance admin teacher_attendance 9
+  EXTRA="-ciV38Demo YES -ciTimeSheet YES" shot L11_se_teacher_time_sheet admin teacher_attendance 10
+  EXTRA="-ciV39Contact YES" shot L12_se_password_contact none home 11
+  EXTRA="-ciV39Contact YES" shot L13_se_admin_switch admin more 9
   EXTRA="-ciV38Demo YES" shot L8_se_budget admin budget 9
   EXTRA="-ciV38Demo YES" shot L9_se_subscriptions_admin admin subscriptions 9
   EXTRA="-ciV38Demo YES" shot M1_se_subscriptions_teacher teacher subscriptions 9

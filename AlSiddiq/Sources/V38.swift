@@ -6,10 +6,11 @@ import SwiftUI
 //   budget_entries(id, center_id, kind 'income'|'expense', amount > 0, day, student_id, note, created_by, created_at)
 // RLS lets only the centre's admin read or write either table; teachers and the general view never fetch them.
 
+/// v3.9: حاضر / غائب / مستأذن (the server column accepts exactly these three words).
 enum TeacherMarkStatus: String, Codable, CaseIterable, Hashable {
-    case present, absent
-    var label: String { self == .present ? "حاضر" : "غائب" }
-    var color: Color { self == .present ? Brand.green : Brand.red }
+    case present, absent, excused
+    var label: String { switch self { case .present: return "حاضر"; case .absent: return "غائب"; case .excused: return "مستأذن" } }
+    var color: Color { switch self { case .present: return Brand.green; case .absent: return Brand.red; case .excused: return Brand.gold } }
 }
 
 struct TeacherMark: Codable, Identifiable, Equatable, Hashable {
@@ -19,6 +20,9 @@ struct TeacherMark: Codable, Identifiable, Equatable, Hashable {
     var day: String
     var status: TeacherMarkStatus
     var markedBy: String? = nil
+    /// v3.9 «حضور و انصراف»: "HH:mm", optional; cleared for غائب.
+    var checkIn: String? = nil
+    var checkOut: String? = nil
 }
 
 enum BudgetKind: String, Codable, CaseIterable, Hashable {
@@ -61,7 +65,8 @@ extension Rows {
     static func teacherMark(_ o: JSON) -> TeacherMark? {
         guard let id = o["id"] as? String, let t = o["teacher_profile_id"] as? String, let day = o["day"] as? String,
               let st = TeacherMarkStatus(rawValue: ((o["status"] as? String) ?? "").lowercased()) else { return nil }
-        return TeacherMark(id: id, teacherId: t, day: String(day.prefix(10)), status: st, markedBy: o["marked_by"] as? String)
+        return TeacherMark(id: id, teacherId: t, day: String(day.prefix(10)), status: st, markedBy: o["marked_by"] as? String,
+                           checkIn: HM.clean(o["check_in"] as? String), checkOut: HM.clean(o["check_out"] as? String))
     }
     static func budgetEntry(_ o: JSON) -> BudgetEntry? {
         guard let id = o["id"] as? String, let k = BudgetKind(rawValue: ((o["kind"] as? String) ?? "").lowercased()) else { return nil }
@@ -76,42 +81,60 @@ private func monthKey(_ isoDay: String) -> String { String(isoDay.prefix(7)) }
 
 // MARK: «حضور وغياب المعلمين»
 
+/// v3.9: a teacher's row in the sheet's time sheet: which time (check-in or check-out) of which teacher.
+struct TeacherTimeEdit: Identifiable {
+    let teacherId: String
+    let checkIn: Bool
+    var id: String { teacherId + (checkIn ? "-in" : "-out") }
+}
+
 struct TeacherAttendanceScreen: View {
     let user: Member
     @EnvironmentObject var model: AppModel
-    @State private var date = Days.today
-    @State private var marks: [String: TeacherMarkStatus] = [:]
+    /// v3.9: Friday is a rest day — the sheet opens on the last record day (Thursday on a Friday) and skips Friday.
+    @State private var date = RestDay.lastWorkDayOnOrBefore(Days.today)
+    @State private var marks: [String: TeacherMark] = [:]
     @State private var loadedDay = ""
+    @State private var timeFor: TeacherTimeEdit? = nil
 
     var body: some View {
         let snap = model.snap
         let teachers = snap.teachers()
         let all = snap.teacherMarks ?? []
         let day = Days.iso(date)
+        let saved = savedMarks(all, day)
+        let dirty = teachers.contains { !sameMark(marks[$0.id], saved[$0.id]) }
         ScreenList(title: "حضور وغياب المعلمين") {
             AppCard {
                 DatePicker("التاريخ", selection: $date, in: ...Date(), displayedComponents: .date)
                     .font(T.titleSmall).foregroundColor(Brand.ink).tint(Brand.navy)
                 Text(Fmt.dayTitle(date) + " • " + Fmt.hijri(date)).font(T.bodySmall).foregroundColor(Brand.muted).padding(.top, 6)
             }
+            if RestDay.isRest(Days.today) { RestDayCard() }
             if teachers.isEmpty {
                 EmptyState(title: "لا يوجد معلمون", message: "أضف المعلمين من «المعلمون» في الإدارة")
             }
             ForEach(teachers) { t in
+                let m = marks[t.id]
+                let sel = m.map { TeacherMarkStatus.allCases.firstIndex(of: $0.status) ?? -1 } ?? -1
                 AppCard(padding: 12) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(t.name).font(T.titleSmall).foregroundColor(Brand.ink)
-                        let sel = marks[t.id].map { TeacherMarkStatus.allCases.firstIndex(of: $0) ?? -1 } ?? -1
                         SegmentedRow(options: TeacherMarkStatus.allCases.map { $0.label }, selected: sel,
-                                     colors: TeacherMarkStatus.allCases.map { $0.color }) { i in marks[t.id] = TeacherMarkStatus.allCases[i] }
+                                     colors: TeacherMarkStatus.allCases.map { $0.color }) { i in setStatus(t.id, TeacherMarkStatus.allCases[i], day) }
+                        // «حضور و انصراف»: offered for حاضر and مستأذن only
+                        HStack(spacing: 8) {
+                            TeacherTimeChip(label: "حضور", value: m?.checkIn, enabled: timesOffered(m)) { timeFor = TeacherTimeEdit(teacherId: t.id, checkIn: true) }
+                            TeacherTimeChip(label: "انصراف", value: m?.checkOut, enabled: timesOffered(m)) { timeFor = TeacherTimeEdit(teacherId: t.id, checkIn: false) }
+                        }
                     }
                 }
                 .accessibilityIdentifier("teacherMark_" + t.id)
             }
             if !teachers.isEmpty {
-                PrimaryButton(title: "حفظ", enabled: !marks.isEmpty) {
-                    let m = marks
-                    model.run("تم حفظ حضور المعلمين", { try await model.repo.saveTeacherAttendance(day: day, marks: m) })
+                PrimaryButton(title: dirty ? "حفظ" : "محفوظ ✓", enabled: dirty && !marks.isEmpty) {
+                    let list = teachers.compactMap { marks[$0.id] }
+                    model.run("تم حفظ حضور المعلمين", { try await model.repo.saveTeacherAttendance(day: day, marks: list) })
                 }
                 .accessibilityIdentifier("saveTeacherAttendance")
             }
@@ -123,12 +146,14 @@ struct TeacherAttendanceScreen: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(teachers) { t in
                         let mine = all.filter { $0.teacherId == t.id && monthKey($0.day) == month }
-                        HStack {
+                        HStack(spacing: 6) {
                             Text(t.name).font(T.bodyMedium).foregroundColor(Brand.ink).lineLimit(1)
                             Spacer()
                             Text("حاضر \(mine.filter { $0.status == .present }.count)").font(T.labelLarge).foregroundColor(Brand.green)
                             Text("•").foregroundColor(Brand.muted)
                             Text("غائب \(mine.filter { $0.status == .absent }.count)").font(T.labelLarge).foregroundColor(Brand.red)
+                            Text("•").foregroundColor(Brand.muted)
+                            Text("مستأذن \(mine.filter { $0.status == .excused }.count)").font(T.labelLarge).foregroundColor(Brand.gold)
                         }
                     }
                     if teachers.isEmpty { Text("—").foregroundColor(Brand.muted) }
@@ -143,25 +168,73 @@ struct TeacherAttendanceScreen: View {
                 let rows = all.filter { $0.day == d }
                 let present = rows.filter { $0.status == .present }.compactMap { r in snap.member(r.teacherId)?.fullName }
                 let absent = rows.filter { $0.status == .absent }.compactMap { r in snap.member(r.teacherId)?.fullName }
-                AppCard(padding: 12, onTap: { if let x = Days.parse(d) { date = x } }) {
+                let excused = rows.filter { $0.status == .excused }.compactMap { r in snap.member(r.teacherId)?.fullName }
+                AppCard(padding: 12, onTap: { if let x = Days.parse(d) { date = RestDay.isRest(x) ? RestDay.prevWorkDay(x) : x } }) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(Days.parse(d).map { Fmt.dayTitle($0) } ?? d).font(T.titleSmall).foregroundColor(Brand.ink)
                         if !present.isEmpty { Text("حاضر: " + present.joined(separator: "، ")).font(T.bodySmall).foregroundColor(Brand.green) }
                         if !absent.isEmpty { Text("غائب: " + absent.joined(separator: "، ")).font(T.bodySmall).foregroundColor(Brand.red) }
+                        if !excused.isEmpty { Text("مستأذن: " + excused.joined(separator: "، ")).font(T.bodySmall).foregroundColor(Brand.gold) }
                     }
                 }
             }
         }
-        .onAppear { loadMarks(day) }
-        .onChange(of: date) { d in loadMarks(Days.iso(d)) }
+        .onAppear {
+            loadMarks(day)
+            // CI screenshots only: "-ciTimeSheet YES" opens the time sheet of the first teacher
+            if UserDefaults.standard.bool(forKey: "ciTimeSheet"), let first = teachers.first { timeFor = TeacherTimeEdit(teacherId: first.id, checkIn: true) }
+        }
+        .onChange(of: date) { d in
+            // Friday is not a record day: the date moves back to Thursday
+            if RestDay.isRest(d) { date = RestDay.prevWorkDay(d); return }
+            loadMarks(Days.iso(d))
+        }
+        .sheet(item: $timeFor) { e in
+            TeacherTimeSheet(title: e.checkIn ? "وقت الحضور" : "وقت الانصراف", initial: timeValue(e),
+                             onSave: { v in setTime(e, v) }, onClear: { setTime(e, nil) })
+        }
+    }
+
+    private func savedMarks(_ all: [TeacherMark], _ day: String) -> [String: TeacherMark] {
+        var out: [String: TeacherMark] = [:]
+        for m in all where m.day == day { out[m.teacherId] = m }
+        return out
+    }
+
+    /// Times are offered only for حاضر and مستأذن.
+    private func timesOffered(_ m: TeacherMark?) -> Bool { m.map { $0.status != .absent } ?? false }
+
+    /// Same status and times (the id of a row the phone made is not compared).
+    private func sameMark(_ a: TeacherMark?, _ b: TeacherMark?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (x?, y?): return x.status == y.status && x.checkIn == y.checkIn && x.checkOut == y.checkOut
+        default: return false
+        }
+    }
+
+    private func setStatus(_ teacherId: String, _ st: TeacherMarkStatus, _ day: String) {
+        var m = marks[teacherId] ?? TeacherMark(id: "", teacherId: teacherId, day: day, status: st)
+        m.status = st
+        if st == .absent { m.checkIn = nil; m.checkOut = nil }   // غائب clears the times
+        marks[teacherId] = m
+    }
+
+    private func timeValue(_ e: TeacherTimeEdit) -> String? {
+        guard let m = marks[e.teacherId] else { return nil }
+        return e.checkIn ? m.checkIn : m.checkOut
+    }
+
+    private func setTime(_ e: TeacherTimeEdit, _ v: String?) {
+        guard var m = marks[e.teacherId], m.status != .absent else { return }
+        if e.checkIn { m.checkIn = v } else { m.checkOut = v }
+        marks[e.teacherId] = m
     }
 
     private func loadMarks(_ day: String) {
         guard day != loadedDay else { return }
         loadedDay = day
-        var m: [String: TeacherMarkStatus] = [:]
-        for r in (model.snap.teacherMarks ?? []) where r.day == day { m[r.teacherId] = r.status }
-        marks = m
+        marks = savedMarks(model.snap.teacherMarks ?? [], day)
     }
 }
 

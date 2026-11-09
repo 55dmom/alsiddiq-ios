@@ -43,6 +43,10 @@ struct AboutInfo: Codable, Equatable {
     var buttons: [AboutButton] = []
     var fromServer = false
     var updatedAt: Date? = nil
+    /// v3.9: the admin's «تواصل مع المركز» switch (optional so an older cache still decodes; nil = off).
+    var contactButton: Bool? = nil
+    /// v3.9: the number «تواصل مع المركز» dials (typed by the admin; "" or nil = the button opens «عن المركز»).
+    var contactPhone: String? = nil
 
     static var bundledText: String {
         guard let u = Bundle.main.url(forResource: "about_text_ar", withExtension: "txt"), let s = try? String(contentsOf: u, encoding: .utf8) else { return "" }

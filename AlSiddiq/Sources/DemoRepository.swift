@@ -96,9 +96,18 @@ final class DemoRepository: AppRepository {
             if (s.teacherMarks ?? []).isEmpty {
                 let ts = s.teachers()
                 var xs: [TeacherMark] = []
-                for back in 1...6 {
-                    let day = Days.iso(Days.add(Days.today, -back))
-                    for (k, t) in ts.enumerated() { xs.append(TeacherMark(id: "tm-\(back)-\(k)", teacherId: t.id, day: day, status: (back + k) % 4 == 0 ? .absent : .present)) }
+                for back in 0...6 {
+                    let d = Days.add(Days.today, -back)
+                    if RestDay.isRest(d) { continue }   // v3.9: no records on a Friday
+                    let day = Days.iso(d)
+                    for (k, t) in ts.enumerated() {
+                        // a mix of حاضر / غائب / مستأذن, with «حضور و انصراف» on the ones who came
+                        let st: TeacherMarkStatus = (back + k) % 4 == 0 ? .absent : ((back + k) % 5 == 0 ? .excused : .present)
+                        let times = st != .absent
+                        xs.append(TeacherMark(id: "tm-\(back)-\(k)", teacherId: t.id, day: day, status: st, markedBy: nil,
+                                              checkIn: times && k % 3 != 2 ? "07:4\(k % 5)" : nil,
+                                              checkOut: times && k % 2 == 0 ? "13:1\(k % 4)" : nil))
+                    }
                 }
                 s.teacherMarks = xs
             }
@@ -227,7 +236,19 @@ final class DemoRepository: AppRepository {
         get { (UserDefaults.standard.data(forKey: "demo_about")).flatMap { try? JSONDecoder().decode(AboutInfo.self, from: $0) } ?? .fallback }
         set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: "demo_about") }
     }
-    var aboutCenter: AboutInfo { aboutStore }
+    var aboutCenter: AboutInfo {
+        var a = aboutStore
+        // CI screenshots only: "-ciV39Contact YES" shows the «تواصل مع المركز» button on the opening screen
+        if UserDefaults.standard.bool(forKey: "ciV39Contact") { a.contactButton = true; a.contactPhone = "+967 1 234 567" }
+        return a
+    }
+    func saveContactButton(_ on: Bool, phone: String) async throws {
+        try require(Permissions.canManageCenter(try requireUser()))
+        var a = aboutStore
+        a.contactButton = on
+        a.contactPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        aboutStore = a
+    }
     func refreshAbout() async {}
     func aboutPhoto(_ path: String) async -> UIImage? { store.photos["about/" + path].flatMap { UIImage(data: $0) } }
     func saveAboutText(_ text: String) async throws {
@@ -375,13 +396,18 @@ final class DemoRepository: AppRepository {
     }
 
     // MARK: v3.8 admin: teacher attendance, budget
-    func saveTeacherAttendance(day: String, marks: [String: TeacherMarkStatus]) async throws -> Int {
+    func saveTeacherAttendance(day: String, marks: [TeacherMark]) async throws -> Int {
         try mutate { d, u in
             try require(u.role == .admin)
-            if marks.isEmpty { throw AppError.validation("اختر حاضر أو غائب لمعلم واحد على الأقل") }
+            if marks.isEmpty { throw AppError.validation("اختر حاضر أو غائب أو مستأذن لمعلم واحد على الأقل") }
             var list = d.teacherMarks ?? []
-            list.removeAll { $0.day == day && marks.keys.contains($0.teacherId) }
-            d.teacherMarks = marks.map { TeacherMark(id: newId(), teacherId: $0.key, day: day, status: $0.value, markedBy: u.id) } + list
+            let ids = Set(marks.map { $0.teacherId })
+            list.removeAll { $0.day == day && ids.contains($0.teacherId) }
+            d.teacherMarks = marks.map { m -> TeacherMark in
+                let keep = m.status != .absent
+                return TeacherMark(id: newId(), teacherId: m.teacherId, day: day, status: m.status, markedBy: u.id,
+                                   checkIn: keep ? m.checkIn : nil, checkOut: keep ? m.checkOut : nil)
+            } + list
             return marks.count
         }
     }

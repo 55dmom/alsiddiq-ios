@@ -166,6 +166,7 @@ struct ViewerSettingsScreen: View {
             MenuRow(title: "الثيمات", sub: "ألوان التطبيق", icon: "paintpalette", tint: Brand.gold) { tools.show(.themes) }
             MenuRow(title: "الإعلانات والتقارير", sub: "إعلانات المركز وتقارير الحلقات", icon: "megaphone") { router.go(.announcements) }
             MenuRow(title: "عن المركز", sub: user.role == .admin ? "تعديل النبذة والصور وأزرار التواصل" : "نبذة المركز وصوره وعنوانه", icon: "info.circle", tint: Brand.maroon) { tools.show(.about) }
+            ContactCentreMenuRow()   // v3.9: under «عن المركز», when the admin switched it on
             MenuRow(title: "تواصل مع المطوّر", sub: "الإيميل وتيليجرام", icon: "chevron.left.forwardslash.chevron.right") { tools.show(.developer) }
             MenuRow(title: "عن التطبيق", sub: "الإصدار وحالة المزامنة", icon: "iphone") { router.go(.about) }
             MenuRow(title: "قفل التطبيق", sub: "الرجوع إلى شاشة كلمة السر", icon: "lock", tint: Brand.red) {
@@ -187,6 +188,7 @@ struct MoreScreen: View {
         let snap = model.snap
         ScreenList(title: "الإدارة") {
             RoleStrip(user: user)
+            ContactCentreSwitch()   // v3.9: «تواصل مع المركز» on the opening screen (default off)
             SectionHeader(title: "الحسابات وكلمات السر")
             MenuRow(title: "كلمات السر", sub: "العامة والإدارة", icon: "key.fill", tint: Brand.gold) { router.go(.passwords) }
             MenuRow(title: "المعلمون", sub: "\(snap.teachers().count) معلم • لكل معلم كلمة سره وحلقته", icon: "rectangle.inset.filled.and.person.filled") { router.go(.teacherNames) }

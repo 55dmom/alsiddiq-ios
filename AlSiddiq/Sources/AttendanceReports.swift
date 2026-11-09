@@ -13,7 +13,8 @@ private struct AttendanceTaking: View {
     let circleId: String?
     @EnvironmentObject var model: AppModel
     @State private var circleIdx = -1
-    @State private var day = Days.today
+    /// v3.9: Friday is a rest day — the sheet opens on the last record day (Thursday on a Friday).
+    @State private var day = RestDay.lastWorkDayOnOrBefore(Days.today)
     @State private var marks: [String: AttendanceStatus] = [:]
     @State private var loadedKey = ""
 
@@ -33,13 +34,14 @@ private struct AttendanceTaking: View {
         let p = students.filter { marks[$0.id]?.isPresent == true }.count
         let a = students.filter { marks[$0.id] == .absent }.count
         let unset = students.filter { marks[$0.id] == nil }.count
-        let canForward = day < Days.today
+        let canForward = RestDay.nextWorkDay(day) != nil
 
         return ScreenList(title: "الحضور والغياب") {
             ChoiceChips(options: circles.map { $0.name }, selected: idx) { circleIdx = $0 }
+            if RestDay.isRest(Days.today) { RestDayCard() }
             AppCard(padding: 8) {
                 HStack {
-                    Button { day = Days.add(day, -1) } label: {
+                    Button { day = RestDay.prevWorkDay(day) } label: {
                         Image(systemName: "chevron.backward").font(.system(size: 17, weight: .semibold)).foregroundColor(Brand.ink).frame(width: 44, height: 44)
                     }.accessibilityLabel("اليوم السابق")
                     Spacer()
@@ -48,7 +50,7 @@ private struct AttendanceTaking: View {
                         Text(Fmt.hijri(day)).font(T.labelSmall).foregroundColor(Brand.muted)
                     }
                     Spacer()
-                    Button { if canForward { day = Days.add(day, 1) } } label: {
+                    Button { if let n = RestDay.nextWorkDay(day) { day = n } } label: {
                         Image(systemName: "chevron.forward").font(.system(size: 17, weight: .semibold)).foregroundColor(canForward ? Brand.ink : Brand.line).frame(width: 44, height: 44)
                     }.disabled(!canForward).accessibilityLabel("اليوم التالي")
                 }

@@ -74,8 +74,10 @@ protocol AppRepository: AnyObject {
     func markAllEventsRead() async throws
     /// v3.7: «اظهر تفوق الطالب» (admin): publish a «المتفوقون» card.
     func publishHonors(_ students: [HonorStudent], message: String?) async throws
-    /// v3.8 (admin only): «حضور وغياب المعلمين» — one mark per teacher for the day (teacher id → حاضر/غائب).
-    func saveTeacherAttendance(day: String, marks: [String: TeacherMarkStatus]) async throws -> Int
+    /// v3.8 (admin only): «حضور وغياب المعلمين» — one mark per teacher for the day (حاضر / غائب / مستأذن + times).
+    func saveTeacherAttendance(day: String, marks: [TeacherMark]) async throws -> Int
+    /// v3.9 (admin only): the «تواصل مع المركز» switch on the opening screen (stored with «عن المركز»; read before a password).
+    func saveContactButton(_ on: Bool, phone: String) async throws
     /// v3.8 (admin only): «الميزانية» — add (empty id) or edit one income/expense entry; delete one.
     func saveBudgetEntry(_ e: BudgetEntry) async throws -> BudgetEntry
     func deleteBudgetEntry(_ id: String) async throws

@@ -530,6 +530,13 @@ final class CloudRepository: AppRepository {
             let rows = try await api.selectAll(token: t, table: "centre_about", query: "select=*&limit=1")
             let btnRows = (try? await api.selectAll(token: t, table: "centre_about_buttons", query: "select=*&order=sort")) ?? []
             var a = AboutInfo.fallback
+            a.contactButton = st.about?.contactButton   // kept when the switch row cannot be read
+            a.contactPhone = st.about?.contactPhone
+            // v3.9: «تواصل مع المركز» switch and its number (public read; a server without the row keeps the last value)
+            if let sw = try? await api.selectAll(token: t, table: "centre_settings", query: "select=contact_button,contact_phone"), let r0 = sw.first {
+                a.contactButton = (r0["contact_button"] as? NSNumber)?.boolValue ?? false
+                a.contactPhone = (r0["contact_phone"] as? String) ?? ""
+            }
             if let r = rows.first {
                 if let b = r["body"] as? String, !b.isEmpty { a.body = b }
                 a.fromServer = true
@@ -770,20 +777,43 @@ final class CloudRepository: AppRepository {
     }
 
     // MARK: v3.8 admin: teacher attendance, budget
-    func saveTeacherAttendance(day: String, marks: [String: TeacherMarkStatus]) async throws -> Int {
+    func saveTeacherAttendance(day: String, marks: [TeacherMark]) async throws -> Int {
         let u = try me()
         try require(u.role == .admin)
-        if marks.isEmpty { throw AppError.validation("اختر حاضر أو غائب لمعلم واحد على الأقل") }
+        if marks.isEmpty { throw AppError.validation("اختر حاضر أو غائب أو مستأذن لمعلم واحد على الأقل") }
         let c = try center()
-        let rows: [JSON] = marks.map { tid, s in
-            ["center_id": c, "teacher_profile_id": tid, "day": day, "status": s.rawValue, "marked_by": u.id]
+        // v3.9: check_in / check_out "HH:mm" (null when absent or not set); غائب sends no times
+        let rows: [JSON] = marks.map { m -> JSON in
+            let keep = m.status != .absent
+            let row: JSON = ["center_id": c, "teacher_profile_id": m.teacherId, "day": day, "status": m.status.rawValue, "marked_by": u.id,
+                             "check_in": opt(keep ? m.checkIn : nil), "check_out": opt(keep ? m.checkOut : nil)]
+            return row
         }
-        let local = marks.map { TeacherMark(id: newId(), teacherId: $0.key, day: day, status: $0.value, markedBy: u.id) }
+        let local = marks.map { m -> TeacherMark in
+            let keep = m.status != .absent
+            return TeacherMark(id: newId(), teacherId: m.teacherId, day: day, status: m.status, markedBy: u.id,
+                               checkIn: keep ? m.checkIn : nil, checkOut: keep ? m.checkOut : nil)
+        }
+        let ids = Set(marks.map { $0.teacherId })
         return try await write(PendingOp(type: "upsert", table: "teacher_attendance", body: json(rows), onConflict: "teacher_profile_id,day"), marks.count) { snap in
             var list = snap.teacherMarks ?? []
-            list.removeAll { $0.day == day && marks.keys.contains($0.teacherId) }
+            list.removeAll { $0.day == day && ids.contains($0.teacherId) }
             snap.teacherMarks = local + list
         }
+    }
+
+    /// v3.9 (admin): the «تواصل مع المركز» switch, in the same row as «عن المركز» (anon-readable).
+    func saveContactButton(_ on: Bool, phone: String) async throws {
+        let num = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        try await adminWrite { t, c in
+            let row: JSON = ["center_id": c, "contact_button": on, "contact_phone": num, "updated_at": Rows.iso(Date())]
+            try await api.upsert(token: t, table: "centre_settings", rows: [row], onConflict: "center_id", ignore: false)
+        }
+        var a = aboutCenter
+        a.contactButton = on
+        a.contactPhone = num
+        st.about = a
+        save()
     }
 
     func saveBudgetEntry(_ e: BudgetEntry) async throws -> BudgetEntry {

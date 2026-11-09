@@ -13,6 +13,7 @@ struct RecordStartScreen: View {
         let students = circle.map { c in snap.studentsIn(c.id).sorted { $0.fullName < $1.fullName } } ?? []
         let logged = Set(snap.recitations.filter { Days.dayOf($0.recordedAt) == Days.today }.map { $0.studentId })
         ScreenList(title: "تسجيل تسميع") {
+            if RestDay.isRest(Days.today) { RestDayCard() }
             Text("١. اختر الحلقة").font(T.labelLarge).foregroundColor(Brand.muted)
             ChoiceChips(options: circles.map { $0.name }, selected: circleIdx) { circleIdx = $0 }
             HStack {
@@ -81,7 +82,7 @@ struct RecordScreen: View {
         let fa = Int(fromAyah) ?? 0
         let ta = Int(toAyah) ?? 0
         let ayat = Quran.ayatBetween(fromSurah, fa, toSurah, ta)
-        let valid = ayat > 0 && grade != nil
+        let valid = ayat > 0 && grade != nil && !RestDay.isRest(Days.today)   // v3.9: no recitation record on a Friday
         let pages = ayat > 0 ? Quran.pagesOf(Quran.globalIndex(fromSurah, fa), Quran.globalIndex(toSurah, ta)) : 0
         let circleStudents = snap.studentsIn(s.circleId).sorted { $0.fullName < $1.fullName }
         let loggedToday = Set(snap.recitations.filter { Days.dayOf($0.recordedAt) == Days.today }.map { $0.studentId })
@@ -101,6 +102,7 @@ struct RecordScreen: View {
         }
 
         return ScreenList(title: "تسجيل لـ \(s.fullName)") {
+            if RestDay.isRest(Days.today) { RestDayCard() }
             AppCard(padding: 12, onTap: { router.go(.student(s.id)) }) {
                 HStack(spacing: 10) {
                     StudentAvatar(s: s)
