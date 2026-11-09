@@ -213,7 +213,8 @@ struct OpeningContactButton: View {
     @State private var on = false
     @State private var phone = ""
     var body: some View {
-        Group {
+        // a VStack, not a Group: a Group that renders nothing does not run its .task
+        VStack(spacing: 0) {
             if on {
                 Button { ContactCentreTap.run(phone: phone, tools: tools) } label: {
                     HStack(spacing: 5) {
@@ -245,7 +246,7 @@ struct ContactCentreMenuRow: View {
     @State private var on = false
     @State private var phone = ""
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
             if on {
                 MenuRow(title: "تواصل مع المركز", sub: "اتصال بالمركز", icon: "phone.fill", tint: Brand.green) {
                     ContactCentreTap.run(phone: phone, tools: tools)
