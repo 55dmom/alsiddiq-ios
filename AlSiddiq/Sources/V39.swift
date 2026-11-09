@@ -144,6 +144,7 @@ enum Dial {
 }
 
 /// Taps «تواصل مع المركز»: dial the admin's number, or open «عن المركز» when there is none.
+@MainActor
 enum ContactCentreTap {
     static func run(phone: String, tools: ToolsHost) {
         let d = Dial.digits(phone)
