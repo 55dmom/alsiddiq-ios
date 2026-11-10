@@ -66,12 +66,6 @@ struct ViewerHome: View {
                     }.padding(.top, 10)
                     HonorsHomeCard(user: user).padding(.top, 12)
                     WeeklyStarStrip().padding(.top, 10)   // v3.8 «وسام الشرف لهذا الأسبوع»
-                    SectionHeader(title: "التفاعل", action: "التقارير") { router.go(.reports) }
-                    AppCard {
-                        Text("عدد السجلات يومياً — آخر 14 يوماً").font(T.bodySmall).foregroundColor(Brand.muted)
-                        Spacer().frame(height: 10)
-                        BarChart(data: stats.dailyRecords.map { BarDatum(label: Fmt.shortDay($0.0) + " \(Days.dayOfMonth($0.0))", value: Double($0.1), detail: "\($0.1) سجل") })
-                    }
                     SectionHeader(title: "كم حفظ كل طالب", action: "كل الطلاب") { router.go(.students) }
                     if per.isEmpty { EmptyState(title: "لا يوجد طلاب بعد", message: "تضيفهم الإدارة أو المعلمون") }
                     VStack(spacing: 8) {
@@ -320,6 +314,23 @@ struct TeacherDialog: View {
                 Field(label: isNew ? "كلمة سره (6 أحرف أو أرقام على الأقل)" : "كلمة سر جديدة (اتركها فارغة لعدم التغيير)", text: $p1, secure: true)
                 if !pw.isEmpty { Field(label: "تأكيدها", text: $p2, secure: true) }
                 if !p2.isEmpty && pw != Passwords.normalise(p2) { Text("غير متطابقتين").font(T.bodySmall).foregroundColor(Brand.red) }
+                if let t = teacher, t.active {
+                    // build 15: the admin removes him directly from his page; the same server step as stopping him, the record stays.
+                    Button {
+                        dialogs.dismiss()
+                        dialogs.show(ConfirmDialog(title: "مسح \(t.fullName)؟",
+                                                   message: "لن يستطيع الدخول بكلمة سره بعد الآن، وتبقى حلقته بدون معلم. سجلاته السابقة تبقى باسمه، وتقدر تشغّله لاحقاً بكلمة سر جديدة.",
+                                                   confirm: "مسح", destructive: true) {
+                            model.run("تم مسح المعلم", { try await model.repo.removeTeacher(t.id) })
+                        })
+                    } label: {
+                        Text("مسح المعلم").font(T.bodyMedium).foregroundColor(Brand.red)
+                            .frame(maxWidth: .infinity).frame(height: 44)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Brand.red.opacity(0.5), lineWidth: 1.2))
+                    }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityLabel("مسح المعلم")
+                }
             }
         } buttons: {
             DialogButton(title: "إلغاء") { dialogs.dismiss() }

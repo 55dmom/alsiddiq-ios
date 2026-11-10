@@ -233,7 +233,8 @@ struct MainShell: View {
             }
         case .circles: CirclesScreen(user: user)
         case .students: StudentsScreen(user: user)
-        case .reports: ReportsScreen(user: user)
+        case .reports:
+            if user.role == .viewer { CenterReportsLocked() } else { ReportsScreen(user: user) }   // build 15: center reports for admin and teachers only
         case .more: MoreScreen(user: user)
         case .teacherMore: TeacherMoreScreen(user: user)
         case .viewerSettings: ViewerSettingsScreen(user: user)

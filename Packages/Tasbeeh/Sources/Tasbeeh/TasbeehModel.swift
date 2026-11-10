@@ -26,7 +26,7 @@ final class TasbeehModel: ObservableObject {
 
     @Published var selected: Int { didSet { d.set(selected, forKey: k + "sel") } }
     @Published var counts: [Int] { didSet { d.set(counts, forKey: k + "counts") } }
-    @Published var target: Int { didSet { d.set(target, forKey: k + "target") } }
+    @Published var target: Int { didSet { d.set(target, forKey: k + "target"); d.set(true, forKey: k + "t33_v15") } }
     @Published var rounds: Int { didSet { d.set(rounds, forKey: k + "rounds") } }
     @Published var total: Int { didSet { d.set(total, forKey: k + "total") } }
     @Published var haptics: Bool { didSet { d.set(haptics, forKey: k + "haptics") } }
@@ -40,8 +40,9 @@ final class TasbeehModel: ObservableObject {
         var c = (d.array(forKey: k + "counts") as? [Int]) ?? []
         if c.count != n { c = Array(repeating: 0, count: n) }
         counts = c
+        // build 15: the counter wraps at 33 by default; a target saved before this build is not read until he saves one again.
         let t = d.integer(forKey: k + "target")
-        target = t > 0 ? t : 33
+        target = d.bool(forKey: k + "t33_v15") ? (t > 0 ? t : 33) : 33
         rounds = d.integer(forKey: k + "rounds")
         total = d.integer(forKey: k + "total")
         haptics = d.object(forKey: k + "haptics") as? Bool ?? true

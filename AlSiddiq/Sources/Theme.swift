@@ -109,11 +109,17 @@ func gradeColor(_ g: Grade) -> Color {
 }
 
 func kindColor(_ k: RecordKind) -> Color {
-    switch k { case .hifz: return Brand.navy; case .tasmee: return Brand.gold; case .muraja: return Brand.maroon }
+    switch k {
+    case .hifz: return Brand.navy; case .tasmee: return Brand.gold; case .muraja: return Brand.maroon
+    case .azfar: return Brand.orange; case .sard: return Brand.green
+    }
 }
 
 func kindIcon(_ k: RecordKind) -> String {
-    switch k { case .hifz: return "book"; case .tasmee: return "waveform"; case .muraja: return "arrow.counterclockwise" }
+    switch k {
+    case .hifz: return "book"; case .tasmee: return "waveform"; case .muraja: return "arrow.counterclockwise"
+    case .azfar: return "star"; case .sard: return "book.closed"
+    }
 }
 
 func attendanceColor(_ s: AttendanceStatus) -> Color {

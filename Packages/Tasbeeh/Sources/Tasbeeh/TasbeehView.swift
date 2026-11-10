@@ -77,9 +77,6 @@ public struct TasbeehView: View {
                     .opacity(s.entered ? 1 : 0)
                 Button { s.showSheet = true } label: {
                     HStack(spacing: 5) {
-                        Text(verbatim: "الدورات")
-                        Text(verbatim: Cine.num(m.rounds)).fontWeight(.semibold)
-                        Rectangle().fill(Color.white.opacity(0.45)).frame(width: 1, height: 12).padding(.horizontal, 6)
                         Text(verbatim: "المجموع")
                         Text(verbatim: Cine.num(m.total)).fontWeight(.semibold)
                     }
@@ -266,7 +263,7 @@ struct TsbOptionsSheet: View {
                 }
                 .buttonStyle(.plain)
                 HStack(spacing: 10) {
-                    stat("العدد", m.count); stat("الدورات", m.rounds); stat("المجموع", m.total)
+                    stat("العدد", m.count); stat("المجموع", m.total)   // build 15: «الدورات» removed
                 }
                 HStack(spacing: 10) {
                     Button { m.resetCurrent(); onReset(); dismiss() } label: {

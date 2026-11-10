@@ -75,13 +75,20 @@ struct Student: Codable, Identifiable, Equatable, Hashable {
 }
 
 enum RecordKind: String, Codable, CaseIterable, Identifiable {
-    case hifz = "HIFZ", tasmee = "TASMEE", muraja = "MURAJA"
+    // build 15 (Android parity): stored values of the first three are unchanged; the last two are appended.
+    case hifz = "HIFZ", tasmee = "TASMEE", muraja = "MURAJA", azfar = "AZFAR", sard = "SARD"
     var id: String { rawValue }
     var label: String {
-        switch self { case .hifz: return "حفظ جديد"; case .tasmee: return "تسميع"; case .muraja: return "مراجعة" }
+        switch self {
+        case .hifz: return "حفظ جديد"; case .tasmee: return "تسميع"; case .muraja: return "مراجعة"
+        case .azfar: return "لم يسمع"; case .sard: return "سرد السورة"
+        }
     }
     var short: String {
-        switch self { case .hifz: return "حفظ"; case .tasmee: return "تسميع"; case .muraja: return "مراجعة" }
+        switch self {
+        case .hifz: return "حفظ"; case .tasmee: return "تسميع"; case .muraja: return "مراجعة"
+        case .azfar: return "لم يسمع"; case .sard: return "سرد"
+        }
     }
 }
 

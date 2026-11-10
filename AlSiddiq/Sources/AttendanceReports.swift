@@ -146,6 +146,15 @@ private struct AttendanceHistory: View {
     }
 }
 
+/// build 15: the general (viewer) password does not see center reports (his request, Nov 10).
+struct CenterReportsLocked: View {
+    var body: some View {
+        ScreenList(title: "التقارير") {
+            EmptyState(title: "تقارير المركز للإدارة والمعلمين فقط", message: "")
+        }
+    }
+}
+
 struct ReportsScreen: View {
     let user: Member
     @EnvironmentObject var model: AppModel

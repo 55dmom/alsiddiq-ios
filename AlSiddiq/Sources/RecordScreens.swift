@@ -34,6 +34,19 @@ struct RecordStartScreen: View {
 }
 
 /// Steps 3–5: surah + ayat, grade, save. Stats update immediately after saving.
+/// build 15 (Android parity): the recording modes shown in the row; «مراجعة» (old records) stays in history only.
+private let recordModes: [RecordKind] = [.hifz, .tasmee, .sard, .azfar]
+
+private func gradeTitle(_ k: RecordKind) -> String {
+    switch k {
+    case .hifz: return "تقييم الحفظ"
+    case .muraja: return "تقييم المراجعة"
+    case .tasmee: return "مراجعة وتسميع في نفس اليوم"
+    case .azfar: return "تقييم لم يسمع"
+    case .sard: return "تقييم سرد السورة"
+    }
+}
+
 struct RecordScreen: View {
     let user: Member
     let studentId: String
@@ -46,10 +59,17 @@ struct RecordScreen: View {
     @State private var fromAyah = "1"
     @State private var toSurah = 1
     @State private var toAyah = "5"
-    @State private var grade: Grade?
+    /// build 15: each recording type keeps its own rating; the same-day row is the one under تسميع.
+    @State private var grades: [RecordKind: Grade] = [:]
     @State private var mistakes = 0
     @State private var notes = ""
     @State private var saving = false
+    /// build 15: the مراجعة box for any recording: nil = not asked, true = راجع من … إلى, false = لم يراجع
+    @State private var reviewed: Bool? = nil
+    @State private var rFromSurah = 1
+    @State private var rFromAyah = "1"
+    @State private var rToSurah = 1
+    @State private var rToAyah = "1"
 
     private func lastHifz(_ snap: CenterSnapshot) -> Recitation? {
         snap.recitations.filter { $0.studentId == studentId && $0.kind == .hifz }.max { $0.recordedAt < $1.recordedAt }
@@ -69,6 +89,25 @@ struct RecordScreen: View {
 
     private func surahLabel(_ n: Int) -> String { "\(n). \(Quran.name(n)) (\(Quran.ayahCount(n)))" }
 
+    /// One rating row: the five grades, verbatim.
+    private func gradeRow(_ title: String, _ current: Grade?, pick: @escaping (Grade) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(T.labelLarge).foregroundColor(Brand.muted)
+            HStack(spacing: 6) {
+                ForEach(Grade.allCases) { g in
+                    let sel = current == g
+                    Button { withAnimation(.easeOut(duration: 0.15)) { pick(g) } } label: {
+                        Text(g.label).font(T.labelMedium).foregroundColor(sel ? .white : gradeColor(g))
+                            .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity).frame(height: 56)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(sel ? gradeColor(g) : gradeColor(g).opacity(0.08)))
+                    }
+                    .buttonStyle(PressableStyle())
+                }
+            }
+        }
+    }
+
     var body: some View {
         let snap = model.snap
         if let s = snap.student(studentId) {
@@ -79,10 +118,15 @@ struct RecordScreen: View {
     }
 
     private func form(_ s: Student, _ snap: CenterSnapshot) -> some View {
+        let grade = grades[kind]
         let fa = Int(fromAyah) ?? 0
         let ta = Int(toAyah) ?? 0
         let ayat = Quran.ayatBetween(fromSurah, fa, toSurah, ta)
-        let valid = ayat > 0 && grade != nil && !RestDay.isRest(Days.today)   // v3.9: no recitation record on a Friday
+        let rfa = Int(rFromAyah) ?? 0
+        let rta = Int(rToAyah) ?? 0
+        let reviewRangeOk = Quran.isValid(rFromSurah, rfa) && Quran.isValid(rToSurah, rta) && Quran.ayatBetween(rFromSurah, rfa, rToSurah, rta) > 0
+        let reviewOk = reviewed != true || reviewRangeOk
+        let valid = ayat > 0 && grade != nil && reviewOk && !RestDay.isRest(Days.today)   // v3.9: no recitation record on a Friday
         let pages = ayat > 0 ? Quran.pagesOf(Quran.globalIndex(fromSurah, fa), Quran.globalIndex(toSurah, ta)) : 0
         let circleStudents = snap.studentsIn(s.circleId).sorted { $0.fullName < $1.fullName }
         let loggedToday = Set(snap.recitations.filter { Days.dayOf($0.recordedAt) == Days.today }.map { $0.studentId })
@@ -93,8 +137,14 @@ struct RecordScreen: View {
         func save(goNext: Bool) {
             guard let g = grade else { return }
             saving = true
+            // build 15: until the record has its own column, the مراجعة line rides at the top of the note.
+            var reviewLine: String? = nil
+            if reviewed == true { reviewLine = "المراجعة: من \(Quran.name(rFromSurah)) \(rfa) إلى \(Quran.name(rToSurah)) \(rta)" }
+            if reviewed == false { reviewLine = "المراجعة: لم يراجع" }
+            let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            let noteAll = [reviewLine, trimmedNotes.isEmpty ? nil : trimmedNotes].compactMap { $0 }.joined(separator: "\n")
             let r = Recitation(id: "", studentId: s.id, circleId: s.circleId, teacherId: user.id, kind: kind, fromSurah: fromSurah, fromAyah: fa,
-                               toSurah: toSurah, toAyah: ta, grade: g, mistakes: mistakes, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
+                               toSurah: toSurah, toAyah: ta, grade: g, mistakes: mistakes, notes: noteAll)
             model.run("حُفظ: \(kind.label) \(ayat) آية — \(g.label)", { try await model.repo.logRecitation(r) }, onError: { saving = false }) { _ in
                 saving = false
                 if goNext, let n = next { router.replaceTop(.record(n.id)) } else { router.back() }
@@ -116,8 +166,8 @@ struct RecordScreen: View {
                 }
             }
             Text("نوع التسجيل").font(T.labelLarge).foregroundColor(Brand.muted)
-            SegmentedRow(options: RecordKind.allCases.map { $0.label }, selected: RecordKind.allCases.firstIndex(of: kind) ?? 0,
-                         colors: RecordKind.allCases.map { kindColor($0) }) { kind = RecordKind.allCases[$0] }
+            SegmentedRow(options: recordModes.map { $0.label }, selected: recordModes.firstIndex(of: kind) ?? 0,
+                         colors: recordModes.map { kindColor($0) }) { kind = recordModes[$0] }
             AppCard {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("المقطع").font(T.titleSmall).foregroundColor(Brand.ink)
@@ -166,18 +216,44 @@ struct RecordScreen: View {
                     }
                 }
             }
-            Text("التقدير").font(T.labelLarge).foregroundColor(Brand.muted)
-            HStack(spacing: 6) {
-                ForEach(Grade.allCases) { g in
-                    let sel = grade == g
-                    Button { withAnimation(.easeOut(duration: 0.15)) { grade = g } } label: {
-                        Text(g.label).font(T.labelMedium).foregroundColor(sel ? .white : gradeColor(g))
-                            .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity).frame(height: 56)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(sel ? gradeColor(g) : gradeColor(g).opacity(0.08)))
+            AppCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("مراجعة").font(T.titleSmall).foregroundColor(Brand.ink)
+                    SegmentedRow(options: ["راجع من … إلى", "لم يراجع"], selected: reviewed == nil ? -1 : (reviewed == true ? 0 : 1),
+                                 colors: [Brand.maroon, Brand.maroon]) { reviewed = ($0 == 0) }
+                    if reviewed == true {
+                        Text("من").font(T.labelMedium).foregroundColor(Brand.muted)
+                        HStack(alignment: .bottom, spacing: 8) {
+                            SelectorField(label: "السورة", value: Quran.name(rFromSurah)) {
+                                dialogs.show(PickerDialog(title: "سورة بداية المراجعة", items: Array(1...114), label: surahLabel, searchable: true) { n in
+                                    rFromSurah = n; rFromAyah = "1"
+                                })
+                            }
+                            .layoutPriority(1.6)
+                            Field(label: "الآية", text: Binding(get: { rFromAyah }, set: { v in rFromAyah = String(v.filter { $0.isNumber }.prefix(3)) }), keyboard: .numberPad)
+                                .frame(width: 96)
+                        }
+                        Text("إلى").font(T.labelMedium).foregroundColor(Brand.muted).padding(.top, 2)
+                        HStack(alignment: .bottom, spacing: 8) {
+                            SelectorField(label: "السورة", value: Quran.name(rToSurah)) {
+                                dialogs.show(PickerDialog(title: "سورة نهاية المراجعة", items: Array(1...114), label: surahLabel, searchable: true) { n in
+                                    rToSurah = n; rToAyah = String(Quran.ayahCount(n))
+                                })
+                            }
+                            .layoutPriority(1.6)
+                            Field(label: "الآية", text: Binding(get: { rToAyah }, set: { v in rToAyah = String(v.filter { $0.isNumber }.prefix(3)) }), keyboard: .numberPad)
+                                .frame(width: 96)
+                        }
+                        if !reviewRangeOk {
+                            Text("نهاية المراجعة قبل بدايتها أو رقم الآية غير صحيح").font(T.bodySmall).foregroundColor(Brand.red)
+                        } else {
+                            Pill(text: "\(Quran.ayatBetween(rFromSurah, rfa, rToSurah, rta)) آية مراجعة", color: Brand.maroon)
+                        }
                     }
-                    .buttonStyle(PressableStyle())
                 }
+            }
+            if kind != .tasmee {
+                gradeRow(gradeTitle(kind), grade) { grades[kind] = $0 }
             }
             AppCard(padding: 12) {
                 HStack(spacing: 0) {
@@ -189,6 +265,9 @@ struct RecordScreen: View {
                 }
                 Spacer().frame(height: 8)
                 Field(label: "ملاحظة (اختياري)", text: $notes, multiline: true, minLines: 2)
+            }
+            if kind == .tasmee {
+                gradeRow(gradeTitle(kind), grade) { grades[kind] = $0 }
             }
             PrimaryButton(title: grade == nil ? "اختر التقدير للحفظ" : "حفظ النتيجة", icon: "checkmark", enabled: valid && !saving, height: 54) { save(goNext: false) }
             if let n = next {

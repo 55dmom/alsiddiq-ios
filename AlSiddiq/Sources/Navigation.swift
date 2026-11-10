@@ -74,7 +74,6 @@ func tabsFor(_ role: Role) -> [TabItem] {
         TabItem(route: .home, label: "الرئيسية", icon: "square.grid.2x2", selectedIcon: "square.grid.2x2.fill"),
         TabItem(route: .students, label: "الطلاب", icon: "graduationcap", selectedIcon: "graduationcap.fill"),
         TabItem(route: .circles, label: "الحلقات", icon: "person.3", selectedIcon: "person.3.fill"),
-        TabItem(route: .reports, label: "التقارير", icon: "chart.bar.xaxis", selectedIcon: "chart.bar.fill"),
         TabItem(route: .tools, label: "الأدوات", icon: "square.grid.3x3", selectedIcon: "square.grid.3x3.fill"),
         TabItem(route: .viewerSettings, label: "الإعدادات", icon: "gearshape", selectedIcon: "gearshape.fill")
     ]
